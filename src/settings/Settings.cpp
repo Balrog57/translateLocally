@@ -28,7 +28,14 @@ Settings::Settings(QObject *parent)
     // Firefox browser extension: https://github.com/jelmervdl/firefox-translations (unlisted & public)
     "{c9cdf885-0431-4eed-8e18-967b1758c951}",
     "{2fa36771-561b-452c-b6c3-7486f42c25ae}"
-}) {
+})
+, llmEnabled(backing_, "llm_enabled", false)
+, llmProvider(backing_, "llm_provider", "Ollama")
+, llmUrl(backing_, "llm_url", "http://localhost:11434")
+, llmModel(backing_, "llm_model", "")
+, openaiApiKey(backing_, "openai_api_key", "")
+, claudeApiKey(backing_, "claude_api_key", "")
+, geminiApiKey(backing_, "gemini_api_key", "") {
     //
 }
 

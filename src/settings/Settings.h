@@ -108,4 +108,13 @@ public:
     SettingImpl<bool> cacheTranslations;
     SettingImpl<QMap<QString, translateLocally::Repository>> repos;
     SettingImpl<QSet<QString>> nativeMessagingClients;
+
+    // LLM/AI Settings
+    SettingImpl<bool> llmEnabled;
+    SettingImpl<QString> llmProvider;
+    SettingImpl<QString> llmUrl;
+    SettingImpl<QString> llmModel;
+    SettingImpl<QString> openaiApiKey;
+    SettingImpl<QString> claudeApiKey;
+    SettingImpl<QString> geminiApiKey;
 };

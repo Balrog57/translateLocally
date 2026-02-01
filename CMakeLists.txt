@@ -148,6 +148,14 @@ set(PROJECT_SOURCES
         src/Translation.h
         src/Translation.cpp
         src/types.h
+        src/DocumentSplitter.cpp
+        src/DocumentSplitter.h
+        src/DocumentMerger.cpp
+        src/DocumentMerger.h
+        src/DocumentProcessor.cpp
+        src/DocumentProcessor.h
+        src/LLMInterface.cpp
+        src/LLMInterface.h
         src/cli/CLIParsing.h
         src/cli/CommandLineIface.cpp
         src/cli/CommandLineIface.h

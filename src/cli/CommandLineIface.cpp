@@ -1,5 +1,6 @@
 #include "CommandLineIface.h"
 #include "cli/NativeMsgManager.h"
+#include "DocumentProcessor.h"
 #include <QFile>
 #include <QProcessEnvironment>
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
@@ -43,6 +44,7 @@ CommandLineIface::CommandLineIface(QObject * parent)
 , settings_(this)
 , models_(this, &settings_)
 , translator_(new MarianInterface(this))
+, llm_(new LLMInterface(&settings_, this))
 , instream_(stdin)
 , outstream_(stdout) {
     // Take care of encoding according to https://doc.qt.io/qt-6/qtextstream.html#setAutoDetectUnicode
@@ -139,7 +141,14 @@ int CommandLineIface::run(QCommandLineParser const &parser) {
 
         // Init the translation model
         translator_->setModel(modelpath, settings_.marianSettings());
-        doTranslation(parser.isSet("html"));
+
+        QString inputPath = parser.value("i");
+        if (parser.isSet("i") && isDocumentFormat(inputPath)) {
+            QString outputPath = parser.isSet("o") ? parser.value("o") : inputPath + ".translated";
+            processDocument(inputPath, outputPath, parser.isSet("ai-improve"));
+        } else {
+            doTranslation(parser.isSet("html"));
+        }
         return 0;
     } else if (parser.isSet("allow-client")) {
         return allowNativeMessagingClient(parser.positionalArguments());
@@ -311,4 +320,111 @@ int CommandLineIface::listNativeMessagingClients() {
 int CommandLineIface::updateNativeMessagingManifests() {
     NativeMsgManager manager;
     return manager.writeNativeMessagingAppManifests(settings_.nativeMessagingClients()) ? 0 : 1;
+}
+
+bool CommandLineIface::isDocumentFormat(const QString &filePath) {
+    QFileInfo fi(filePath);
+    QString suffix = fi.suffix().toLower();
+    return suffix == "docx" || suffix == "epub" || suffix == "pdf";
+}
+
+void CommandLineIface::processDocument(const QString &inputPath, const QString &outputPath, bool useAI) {
+    // Disconnect default signals to avoid interference
+    disconnect(translator_, &MarianInterface::error, this, &CommandLineIface::outputError);
+    disconnect(translator_, &MarianInterface::translationReady, this, &CommandLineIface::outputTranslation);
+
+    DocumentProcessor processor(inputPath, outputPath);
+
+    // Split the document
+    if (!processor.open()) {
+        outputError("Failed to open document: " + inputPath);
+        return;
+    }
+
+    // Get segments
+    QList<DocumentSplitter::Segment> segments = processor.getSegments();
+    if (segments.isEmpty()) {
+        outputError("No text found in document or document empty.");
+        return;
+    }
+
+    std::cout << "Processing document: " << inputPath.toStdString() << " (" << segments.size() << " segments)" << std::endl;
+    std::cout << "Starting translation..." << std::endl;
+
+    QList<DocumentSplitter::Segment> translatedSegments;
+    int progress = 0;
+    bool translationReceived = false;
+    bool errorOccurred = false;
+
+    for (const auto &seg : segments) {
+        if (errorOccurred) break;
+        progress++;
+        std::cout << "\rTranslating segment " << progress << "/" << segments.size() << "..." << std::flush;
+
+        // Setup a local event loop for this segment
+        translationReceived = false;
+
+        // Connect unique signals for this translation
+        QMetaObject::Connection successConn = connect(translator_, &MarianInterface::translationReady,
+            [&](Translation t) {
+                DocumentSplitter::Segment transSeg = seg;
+                transSeg.text = t.translation();
+
+                if (useAI) {
+                     QEventLoop aiLoop;
+
+                     QMetaObject::Connection aiConn = connect(llm_, &LLMInterface::verificationReady,
+                         [&](QString suggestion) {
+                             if (!suggestion.isEmpty()) {
+                                 transSeg.text = suggestion;
+                             }
+                             aiLoop.exit();
+                         });
+
+                     QMetaObject::Connection aiErr = connect(llm_, &LLMInterface::error,
+                         [&](QString msg) {
+                              fprintf(stderr, "AI Error: %s\n", msg.toStdString().c_str());
+                              aiLoop.exit();
+                         });
+
+                     llm_->verifyTranslation(seg.text, t.translation());
+                     aiLoop.exec();
+
+                     disconnect(aiConn);
+                     disconnect(aiErr);
+                }
+
+                translatedSegments.append(transSeg);
+                translationReceived = true;
+                eventLoop_.exit();
+            });
+
+        QMetaObject::Connection errorConn = connect(translator_, &MarianInterface::error,
+            [&](QString msg) {
+                outputError(msg);
+                errorOccurred = true;
+                eventLoop_.exit();
+            });
+
+        translator_->translate(seg.text, false);
+
+        // Wait for result
+        if (!translationReceived && !errorOccurred) {
+            eventLoop_.exec();
+        }
+
+        disconnect(successConn);
+        disconnect(errorConn);
+    }
+
+    std::cout << std::endl << "Translation complete. Reassembling document..." << std::endl;
+
+    if (!errorOccurred) {
+        processor.setTranslatedSegments(translatedSegments);
+        if (processor.save()) {
+            std::cout << "Successfully saved to: " << outputPath.toStdString() << std::endl;
+        } else {
+            outputError("Failed to save translated document.");
+        }
+    }
 }

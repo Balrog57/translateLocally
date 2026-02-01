@@ -38,7 +38,8 @@ static void CLIArgumentInit(QAppType& translateLocallyApp, QCommandLineParser& p
     parser.addOption({"update-manifests", QObject::tr("Register native messaging clients with user profile.")});
     parser.addOption({"debug", QObject::tr("Print debug messages")});
     parser.addOption({"html", QObject::tr("Input is HTML")});
-    
+    parser.addOption({"ai-improve", QObject::tr("Improve translation using AI")});
+
     parser.process(translateLocallyApp);
 }
 

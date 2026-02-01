@@ -11,6 +11,9 @@
 #include "MarianInterface.h"
 #include "Translation.h"
 #include "Network.h"
+#include "DocumentSplitter.h"
+#include "DocumentMerger.h"
+#include "LLMInterface.h"
 
 class CommandLineIface : public QObject {
     Q_OBJECT
@@ -23,6 +26,7 @@ private:
     Settings settings_;
     ModelManager models_;
     QPointer<MarianInterface> translator_;
+    QPointer<LLMInterface> llm_;
 
     // do_once file in and file out
     QFile infile_;
@@ -37,6 +41,10 @@ private:
     void doTranslation(bool HTML);
     void downloadRemoteModel(QString modelID);
     inline QString &fetchData(QString &);
+
+    // Document processing
+    void processDocument(const QString &inputPath, const QString &outputPath, bool useAI = false);
+    bool isDocumentFormat(const QString &filePath);
 
     int allowNativeMessagingClient(QStringList ids);
     int removeNativeMessagingClient(QStringList ids);
