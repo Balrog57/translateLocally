@@ -21,27 +21,62 @@ void LLMInterface::verifyTranslation(const QString &sourceText, const QString &t
     chunks_.clear();
     completedCount_ = 0;
 
-    // Split text into chunks (approx 4000 chars) for better parallel processing.
-    // Avoid too many small requests which choke local LLMs.
+    // Split text into chunks, keeping source and translation synchronized by line
+    const int CHUNK_SIZE = 2000;  // ~600-700 tokens, safe for 32k context models
+
     QStringList sourceLines = sourceText.split('\n');
     QStringList transLines = translatedText.split('\n');
     int maxLines = qMax(sourceLines.size(), transLines.size());
 
     QString currentSource;
     QString currentTrans;
-    for (int i = 0; i < maxLines; ++i) {
-        if (i < sourceLines.size()) currentSource += sourceLines[i] + "\n";
-        if (i < transLines.size()) currentTrans += transLines[i] + "\n";
 
-    // Optimized chunk size for Desktop LLMs with large context (e.g. Qwen, Llama).
-    // 3000 chars is roughly 1000-1500 tokens, which fits perfectly in modern 32k+ context windows.
-    // This reduces the number of requests and improves translation coherence.
-    if (currentSource.length() > 3000 || i == maxLines - 1) {
-            Chunk c = {static_cast<int>(chunks_.size()), currentSource.trimmed(), currentTrans.trimmed(), currentTrans.trimmed(), false};
+    for (int i = 0; i < maxLines; ++i) {
+        QString sourceLine = (i < sourceLines.size()) ? sourceLines[i] + "\n" : "";
+        QString transLine = (i < transLines.size()) ? transLines[i] + "\n" : "";
+
+        // If adding this line would exceed chunk size, create a chunk first
+        if (!currentSource.isEmpty() &&
+            (currentSource.length() + sourceLine.length() > CHUNK_SIZE ||
+             currentTrans.length() + transLine.length() > CHUNK_SIZE)) {
+            Chunk c = {static_cast<int>(chunks_.size()), currentSource.trimmed(),
+                      currentTrans.trimmed(), currentTrans.trimmed(), false};
             chunks_.append(c);
             currentSource.clear();
             currentTrans.clear();
         }
+
+        // If a SINGLE line is too long, split it proportionally to maintain alignment
+        if (sourceLine.length() > CHUNK_SIZE || transLine.length() > CHUNK_SIZE) {
+            int maxLen = qMax(sourceLine.length(), transLine.length());
+            int numSplits = (maxLen + CHUNK_SIZE - 1) / CHUNK_SIZE;
+
+            for (int split = 0; split < numSplits; ++split) {
+                int sourceChunkLen = sourceLine.length() / numSplits;
+                int transChunkLen = transLine.length() / numSplits;
+
+                currentSource = sourceLine.mid(split * sourceChunkLen, sourceChunkLen);
+                currentTrans = transLine.mid(split * transChunkLen, transChunkLen);
+
+                if (!currentSource.trimmed().isEmpty()) {
+                    Chunk c = {static_cast<int>(chunks_.size()), currentSource.trimmed(),
+                              currentTrans.trimmed(), currentTrans.trimmed(), false};
+                    chunks_.append(c);
+                }
+            }
+            currentSource.clear();
+            currentTrans.clear();
+        } else {
+            currentSource += sourceLine;
+            currentTrans += transLine;
+        }
+    }
+
+    // Final chunk if any text remains
+    if (!currentSource.trimmed().isEmpty()) {
+        Chunk c = {static_cast<int>(chunks_.size()), currentSource.trimmed(),
+                  currentTrans.trimmed(), currentTrans.trimmed(), false};
+        chunks_.append(c);
     }
 
     qDebug() << "LLMInterface: Created" << chunks_.size() << "chunks.";
@@ -76,21 +111,13 @@ void LLMInterface::processQueue() {
 void LLMInterface::sendRequest(int index) {
     QString provider = settings_->llmProvider();
 
-    QString context;
-    if (index > 0) {
-        context = QString("Context (previous): %1\n").arg(chunks_[index-1].source.right(300));
-    }
-
-    QString prompt = QString("### Instructions:\n"
-                             "1. You are a professional translator. Compare the 'Source Text' (English) and the 'Machine Translation' (French).\n"
-                             "2. Produce a high-quality, natural French version.\n"
-                             "3. DO NOT use <think> tags. DO NOT provide any reasoning, notes, or explanations.\n"
-                             "4. Output ONLY the final French refined text.\n\n"
-                             "### Context:\n%1\n"
-                             "### Source Text (English):\n%2\n\n"
-                             "### Machine Translation (French to improve):\n%3\n\n"
-                             "### Final Refined Translation (French):")
-                             .arg(context, chunks_[index].source, chunks_[index].machineTranslation);
+    // Ultra-short prompt to fit in 4k context window models
+    // Format: ~20 tokens for instructions, leaving ~3800 tokens for text + response
+    QString prompt = QString("Improve this French translation. Output ONLY the improved French, no explanations.\n\n"
+                             "Source: %1\n\n"
+                             "Translation: %2\n\n"
+                             "Improved:")
+                             .arg(chunks_[index].source, chunks_[index].machineTranslation);
 
     if (provider == "Ollama") {
         callOllama(index, prompt);
@@ -155,8 +182,12 @@ void LLMInterface::callLMStudio(int index, const QString &prompt) {
     json["model"] = settings_->llmModel().isEmpty() ? "default" : settings_->llmModel();
     json["messages"] = messages;
     json["temperature"] = 0.3;
+    json["stream"] = false;  // LM Studio requires explicit stream parameter
 
-    QNetworkReply *reply = networkManager_->post(request, QJsonDocument(json).toJson());
+    QByteArray jsonData = QJsonDocument(json).toJson();
+    qDebug() << "LLMInterface: Request JSON:" << jsonData;
+
+    QNetworkReply *reply = networkManager_->post(request, jsonData);
     activeRequests_.insert(reply, index);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() { handleReply(reply); });
 }
@@ -238,8 +269,29 @@ void LLMInterface::handleReply(QNetworkReply *reply) {
         }
     } else {
         if (reply->error() != QNetworkReply::OperationCanceledError) {
+            QByteArray errorBody = reply->readAll();
             qWarning() << "LLMInterface: Network error for chunk" << index << ":" << reply->errorString();
-            emit error(tr("Network error: %1").arg(reply->errorString()));
+            qWarning() << "LLMInterface: HTTP Status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            qWarning() << "LLMInterface: Error response body:" << errorBody;
+
+            QString errorMsg = reply->errorString();
+            // Try to parse error details from response body
+            QJsonDocument errorDoc = QJsonDocument::fromJson(errorBody);
+            if (!errorDoc.isNull() && errorDoc.isObject()) {
+                QJsonObject errorObj = errorDoc.object();
+                if (errorObj.contains("error")) {
+                    QJsonValue errorValue = errorObj["error"];
+                    if (errorValue.isString()) {
+                        errorMsg += QString(": %1").arg(errorValue.toString());
+                    } else if (errorValue.isObject()) {
+                        QString detailMsg = errorValue.toObject()["message"].toString();
+                        if (!detailMsg.isEmpty()) {
+                            errorMsg += QString(": %1").arg(detailMsg);
+                        }
+                    }
+                }
+            }
+            emit error(tr("Network error: %1").arg(errorMsg));
         }
     }
 
@@ -455,4 +507,52 @@ void LLMInterface::fetchLMStudioModels() {
         reply->deleteLater();
         emit modelsDiscovered(models);
     });
+}
+
+void LLMInterface::testConnection() {
+    QString provider = settings_->llmProvider();
+    qDebug() << "LLMInterface: Testing connection to" << provider;
+
+    if (provider == "Ollama" || provider == "LM Studio") {
+        // Test local provider by fetching models list
+        QString baseUrl = settings_->llmUrl().trimmed();
+        if (baseUrl.isEmpty()) {
+            emit connectionTestResult(false, tr("Server URL is not configured."));
+            return;
+        }
+        if (baseUrl.endsWith("/")) baseUrl.chop(1);
+
+        QString endpoint = (provider == "Ollama") ? "/api/tags" : "/v1/models";
+        QUrl url(baseUrl + endpoint);
+
+        QNetworkRequest request(url);
+        request.setTransferTimeout(5000); // 5 second timeout for connection test
+
+        QNetworkReply *reply = networkManager_->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, provider]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+                if (!doc.isNull() && doc.isObject()) {
+                    emit connectionTestResult(true, tr("Successfully connected to %1!").arg(provider));
+                } else {
+                    emit connectionTestResult(false, tr("Connected but received invalid response."));
+                }
+            } else {
+                emit connectionTestResult(false, tr("Connection failed: %1").arg(reply->errorString()));
+            }
+            reply->deleteLater();
+        });
+    } else {
+        // Cloud providers - just check API key is set
+        QString apiKey;
+        if (provider == "OpenAI") apiKey = settings_->openaiApiKey();
+        else if (provider == "Claude") apiKey = settings_->claudeApiKey();
+        else if (provider == "Google Gemini") apiKey = settings_->geminiApiKey();
+
+        if (apiKey.isEmpty()) {
+            emit connectionTestResult(false, tr("API key is not configured."));
+        } else {
+            emit connectionTestResult(true, tr("API key is configured for %1.").arg(provider));
+        }
+    }
 }

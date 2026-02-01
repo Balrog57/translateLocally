@@ -156,6 +156,9 @@ set(PROJECT_SOURCES
         src/DocumentProcessor.h
         src/LLMInterface.cpp
         src/LLMInterface.h
+        src/DocumentTranslationDialog.cpp
+        src/DocumentTranslationDialog.h
+        src/DocumentTranslationDialog.ui
         src/cli/CLIParsing.h
         src/cli/CommandLineIface.cpp
         src/cli/CommandLineIface.h

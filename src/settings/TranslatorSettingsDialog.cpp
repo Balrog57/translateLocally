@@ -4,6 +4,7 @@
 #include "settings/RepositoryTableModel.h"
 #include "ui_TranslatorSettingsDialog.h"
 #include "NewRepoDialog.h"
+#include "LLMInterface.h"
 #include <thread>
 #include <QDesktopServices>
 #include <QUrl>
@@ -19,6 +20,7 @@ TranslatorSettingsDialog::TranslatorSettingsDialog(QWidget *parent, Settings *se
 , modelManager_(modelManager)
 , modelProxy_(this)
 , repositoryModel_(this)
+, llmInterface_(new LLMInterface(settings, this))
 {
     ui_->setupUi(this);
 
@@ -84,6 +86,18 @@ TranslatorSettingsDialog::TranslatorSettingsDialog(QWidget *parent, Settings *se
 
     connect(this, &QDialog::accepted, this, &TranslatorSettingsDialog::applySettings);
 
+    // LLM connections
+    connect(ui_->llmProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TranslatorSettingsDialog::on_llmProviderCombo_currentIndexChanged);
+    connect(ui_->llmRefreshModelsButton, &QPushButton::clicked,
+            this, &TranslatorSettingsDialog::on_llmRefreshModelsButton_clicked);
+    connect(ui_->llmTestButton, &QPushButton::clicked,
+            this, &TranslatorSettingsDialog::on_llmTestButton_clicked);
+    connect(llmInterface_, &LLMInterface::modelsDiscovered,
+            this, &TranslatorSettingsDialog::onModelsDiscovered);
+    connect(llmInterface_, &LLMInterface::connectionTestResult,
+            this, &TranslatorSettingsDialog::onConnectionTestResult);
+
     // Update context menu state on start-up
     updateModelActions();
     updateRepoActions();
@@ -104,6 +118,19 @@ void TranslatorSettingsDialog::updateSettings()
     ui_->syncScrollingCheckbox->setChecked(settings_->syncScrolling());
     ui_->cacheTranslationsCheckbox->setChecked(settings_->cacheTranslations());
     repositoryModel_.load(settings_->repos.value());
+
+    // LLM settings
+    ui_->llmEnabledCheckbox->setChecked(settings_->llmEnabled());
+    int providerIndex = ui_->llmProviderCombo->findText(settings_->llmProvider());
+    ui_->llmProviderCombo->setCurrentIndex(providerIndex >= 0 ? providerIndex : 1); // Default LM Studio
+    ui_->llmUrlEdit->setText(settings_->llmUrl());
+    ui_->llmModelCombo->setCurrentText(settings_->llmModel());
+    ui_->openaiKeyEdit->setText(settings_->openaiApiKey());
+    ui_->claudeKeyEdit->setText(settings_->claudeApiKey());
+    ui_->geminiKeyEdit->setText(settings_->geminiApiKey());
+
+    // Update UI based on provider
+    on_llmProviderCombo_currentIndexChanged(ui_->llmProviderCombo->currentIndex());
 }
 
 void TranslatorSettingsDialog::applySettings()
@@ -116,6 +143,15 @@ void TranslatorSettingsDialog::applySettings()
     settings_->syncScrolling.setValue(ui_->syncScrollingCheckbox->isChecked());
     settings_->cacheTranslations.setValue(ui_->cacheTranslationsCheckbox->isChecked());
     settings_->repos.setValue(repositoryModel_.dump());
+
+    // LLM settings
+    settings_->llmEnabled.setValue(ui_->llmEnabledCheckbox->isChecked());
+    settings_->llmProvider.setValue(ui_->llmProviderCombo->currentText());
+    settings_->llmUrl.setValue(ui_->llmUrlEdit->text());
+    settings_->llmModel.setValue(ui_->llmModelCombo->currentText());
+    settings_->openaiApiKey.setValue(ui_->openaiKeyEdit->text());
+    settings_->claudeApiKey.setValue(ui_->claudeKeyEdit->text());
+    settings_->geminiApiKey.setValue(ui_->geminiKeyEdit->text());
 }
 
 void TranslatorSettingsDialog::revealSelectedModels()
@@ -261,4 +297,113 @@ void TranslatorSettingsDialog::on_getMoreButton_clicked()
 {
     modelManager_->fetchRemoteModels();
     ui_->getMoreButton->setEnabled(false);
+}
+
+void TranslatorSettingsDialog::on_llmProviderCombo_currentIndexChanged(int index)
+{
+    QString provider = ui_->llmProviderCombo->currentText();
+    bool isLocal = (provider == "Ollama" || provider == "LM Studio");
+    bool isCloud = !isLocal;
+
+    // Show/hide URL field for local providers
+    ui_->llmUrlLabel->setVisible(isLocal);
+    ui_->llmUrlEdit->setVisible(isLocal);
+    ui_->llmRefreshModelsButton->setVisible(isLocal);
+
+    // Show/hide API key fields based on provider
+    ui_->llmApiKeyGroup->setVisible(isCloud);
+    ui_->openaiKeyLabel->setVisible(provider == "OpenAI");
+    ui_->openaiKeyEdit->setVisible(provider == "OpenAI");
+    ui_->claudeKeyLabel->setVisible(provider == "Claude");
+    ui_->claudeKeyEdit->setVisible(provider == "Claude");
+    ui_->geminiKeyLabel->setVisible(provider == "Google Gemini");
+    ui_->geminiKeyEdit->setVisible(provider == "Google Gemini");
+
+    // Set default URLs
+    if (provider == "Ollama" && ui_->llmUrlEdit->text().isEmpty()) {
+        ui_->llmUrlEdit->setText("http://localhost:11434");
+    } else if (provider == "LM Studio" && ui_->llmUrlEdit->text().isEmpty()) {
+        ui_->llmUrlEdit->setText("http://localhost:1234");
+    }
+}
+
+void TranslatorSettingsDialog::on_llmRefreshModelsButton_clicked()
+{
+    QString provider = ui_->llmProviderCombo->currentText();
+
+    if (provider != "Ollama" && provider != "LM Studio") {
+        QMessageBox::information(this, tr("Model Discovery"),
+            tr("Model discovery is only available for local providers (Ollama and LM Studio)."));
+        return;
+    }
+
+    // Temporarily apply current settings for discovery
+    settings_->llmProvider.setValue(ui_->llmProviderCombo->currentText());
+    settings_->llmUrl.setValue(ui_->llmUrlEdit->text());
+
+    // Disable button during discovery
+    ui_->llmRefreshModelsButton->setEnabled(false);
+    ui_->llmRefreshModelsButton->setText(tr("Discovering..."));
+
+    // Trigger model discovery
+    llmInterface_->discoverLocalModels();
+}
+
+void TranslatorSettingsDialog::onModelsDiscovered(QStringList models)
+{
+    // Re-enable button
+    ui_->llmRefreshModelsButton->setEnabled(true);
+    ui_->llmRefreshModelsButton->setText(tr("Refresh"));
+
+    if (models.isEmpty()) {
+        QMessageBox::warning(this, tr("Model Discovery"),
+            tr("No models found. Please ensure your LLM server is running and has models loaded."));
+        return;
+    }
+
+    QString currentModel = ui_->llmModelCombo->currentText();
+    ui_->llmModelCombo->clear();
+    ui_->llmModelCombo->addItems(models);
+
+    if (!currentModel.isEmpty()) {
+        int idx = ui_->llmModelCombo->findText(currentModel);
+        if (idx >= 0) {
+            ui_->llmModelCombo->setCurrentIndex(idx);
+        } else {
+            ui_->llmModelCombo->setCurrentText(currentModel);
+        }
+    }
+
+    QMessageBox::information(this, tr("Model Discovery"),
+        tr("Found %n model(s)", "", models.size()));
+}
+
+void TranslatorSettingsDialog::on_llmTestButton_clicked()
+{
+    // Temporarily apply current settings for test
+    settings_->llmProvider.setValue(ui_->llmProviderCombo->currentText());
+    settings_->llmUrl.setValue(ui_->llmUrlEdit->text());
+    settings_->openaiApiKey.setValue(ui_->openaiKeyEdit->text());
+    settings_->claudeApiKey.setValue(ui_->claudeKeyEdit->text());
+    settings_->geminiApiKey.setValue(ui_->geminiKeyEdit->text());
+
+    // Disable button during test
+    ui_->llmTestButton->setEnabled(false);
+    ui_->llmTestButton->setText(tr("Testing..."));
+
+    // Trigger connection test
+    llmInterface_->testConnection();
+}
+
+void TranslatorSettingsDialog::onConnectionTestResult(bool success, QString message)
+{
+    // Re-enable button
+    ui_->llmTestButton->setEnabled(true);
+    ui_->llmTestButton->setText(tr("Test Connection"));
+
+    if (success) {
+        QMessageBox::information(this, tr("Connection Test"), message);
+    } else {
+        QMessageBox::warning(this, tr("Connection Test"), message);
+    }
 }

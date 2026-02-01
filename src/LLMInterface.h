@@ -20,6 +20,7 @@ public:
     void verifyTranslation(const QString &sourceText, const QString &translatedText);
     void cancelVerification();
     void discoverLocalModels();
+    void testConnection();
 
 signals:
     void verificationStarted();
@@ -27,6 +28,7 @@ signals:
     void partialResultReady(QString suggestion);
     void verificationReady(QString llmSuggestion);
     void modelsDiscovered(QStringList models);
+    void connectionTestResult(bool success, QString message);
     void error(QString message);
 
 private slots:

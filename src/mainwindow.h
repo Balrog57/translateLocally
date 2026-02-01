@@ -62,6 +62,12 @@ private slots:
 
     void on_actionSplit_Vertically_triggered();
 
+    void on_actionOpenDocument_triggered();
+
+    void on_actionSaveTranslation_triggered();
+
+    void on_actionExit_triggered();
+
     void popupError(QString error);
 
     void popupWarning(QString warning);

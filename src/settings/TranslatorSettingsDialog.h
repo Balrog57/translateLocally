@@ -12,6 +12,8 @@ namespace Ui {
 class TranslatorSettingsDialog;
 }
 
+class LLMInterface;
+
 class TranslatorSettingsDialog : public QDialog
 {
     Q_OBJECT
@@ -39,6 +41,12 @@ private slots:
 
     void on_getMoreButton_clicked();
 
+    void on_llmProviderCombo_currentIndexChanged(int index);
+    void on_llmRefreshModelsButton_clicked();
+    void on_llmTestButton_clicked();
+    void onModelsDiscovered(QStringList models);
+    void onConnectionTestResult(bool success, QString message);
+
 signals:
     void downloadModel(Model model);
 
@@ -49,6 +57,7 @@ private:
     ModelManager *modelManager_;
     QSortFilterProxyModel modelProxy_;
     RepositoryTableModel repositoryModel_;
+    LLMInterface *llmInterface_;
 };
 
 #endif // TRANSLATORSETTINGS_H

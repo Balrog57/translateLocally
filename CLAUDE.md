@@ -219,9 +219,11 @@ LLM settings are persisted in [Settings](src/settings/Settings.h:113-119):
 - `openaiApiKey`, `claudeApiKey`, `geminiApiKey`: API authentication
 
 **Processing Strategy:**
-- Chunks translations into 3000-character segments for coherence
+- Chunks translations into 2000-character segments (~600-700 tokens) for 32k context compatibility
+- Synchronized chunking: source and translation kept aligned by line to prevent mismatches
 - Sequential processing (maxConcurrent=1) for local LLM stability
-- Optimized prompts to minimize verbosity and reasoning artifacts
+- Optimized ultra-short prompts to minimize token usage and reasoning artifacts
+- Proportional splitting of long lines to maintain source/translation correspondence
 
 ### Dependencies
 
@@ -231,3 +233,52 @@ LLM settings are persisted in [Settings](src/settings/Settings.h:113-119):
 - LibreOffice (optional, for PDF conversion)
 
 **No additional dependencies beyond standard translateLocally build.**
+
+## GUI Features for Document Translation
+
+### File Menu
+The GUI includes a new **File** menu with document translation capabilities:
+- **Open Document** (Ctrl+O): Opens documents (TXT, DOCX, EPUB, PDF) for translation
+- **Save Translation** (Ctrl+Shift+S): Saves the current translation output to a file
+- **Exit** (Ctrl+Q): Closes the application
+
+### AI Improvement Settings
+Settings → **AI Improvement** tab provides configuration for LLM-based translation refinement:
+
+**Local Providers (Ollama, LM Studio):**
+- Server URL configuration (default: http://localhost:11434 for Ollama, http://localhost:1234 for LM Studio)
+- Model discovery with "Refresh" button to fetch available models
+- Connection testing to verify server availability
+
+**Cloud Providers (OpenAI, Claude, Google Gemini):**
+- API key configuration with password masking
+- Provider selection dropdown
+- Model name specification
+
+### Document Translation Dialog
+Accessed via File → Open Document, provides:
+- **Input/Output file selection** with automatic output path generation
+- **AI status display** showing whether LLM improvement is enabled and which provider
+- **Dual progress bars:**
+  - Translation progress: tracks Marian translation of segments
+  - AI Improvement progress: tracks LLM refinement of translated segments
+- **Cancel button** to abort translation mid-process
+- **Status messages** for errors and completion
+
+### Implementation Details
+- **Worker thread pattern** prevents UI blocking during long translations
+- **QEventLoop synchronization** for waiting on async MarianInterface and LLMInterface operations
+- **Settings persistence** via QSettings for LLM configuration
+- **Real-time progress updates** via Qt signals for translation and LLM processing
+
+### Testing with LM Studio
+1. Launch LM Studio and load a model (e.g., Qwen 4k/32k, Llama)
+2. Start the local server (port 1234 by default)
+3. In translateLocally: Settings → AI Improvement → Test Connection
+4. Enable AI improvement and select LM Studio provider
+5. Use File → Open Document to translate with AI refinement
+
+**Known Limitations:**
+- Model discovery may take a few seconds for local providers
+- Very large documents (>50MB) may take significant time with AI improvement
+- Progress bar updates are per-segment, not per-chunk (may appear to pause on large segments)

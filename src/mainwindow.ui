@@ -190,6 +190,15 @@
      <height>24</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionOpenDocument"/>
+    <addaction name="actionSaveTranslation"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
      <string>Edit</string>
@@ -210,6 +219,7 @@
     <addaction name="actionSyncScrolling"/>
     <addaction name="actionShowAlignment"/>
    </widget>
+   <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuView"/>
   </widget>
@@ -280,6 +290,33 @@
     <property name="text">
       <string>Sync Scrolling</string>
     </property>
+  </action>
+  <action name="actionOpenDocument">
+   <property name="text">
+    <string>Open Document...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionSaveTranslation">
+   <property name="text">
+    <string>Save Translation...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
+   </property>
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
   </action>
  </widget>
  <resources/>

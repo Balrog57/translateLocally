@@ -15,12 +15,14 @@
 #include <QDir>
 #include <QMessageBox>
 #include <QFontDialog>
+#include <QFileDialog>
 #include <QSignalBlocker>
 #include <QStandardItem>
 #include <QStandardPaths>
 #include <QWindow>
 #include "Translation.h"
 #include "cli/NativeMsgManager.h"
+#include "DocumentTranslationDialog.h"
 #include "logo/logo_svg.h"
 #include <iostream>
 #include <QScrollBar>
@@ -538,4 +540,47 @@ void MainWindow::on_outputBox_cursorPositionChanged() {
 bool MainWindow::registerNativeMessagingAppManifest() {
     NativeMsgManager manager;
     return manager.writeNativeMessagingAppManifests(settings_.nativeMessagingClients());
+}
+
+void MainWindow::on_actionOpenDocument_triggered() {
+    QString filePath = QFileDialog::getOpenFileName(this,
+        tr("Open Document"),
+        QString(),
+        tr("Documents (*.txt *.docx *.epub *.pdf);;All Files (*)"));
+
+    if (!filePath.isEmpty()) {
+        DocumentTranslationDialog *dialog = new DocumentTranslationDialog(
+            filePath, &settings_, translator_, this);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->show();
+    }
+}
+
+void MainWindow::on_actionSaveTranslation_triggered() {
+    QString filePath = QFileDialog::getSaveFileName(this,
+        tr("Save Translation"),
+        QString(),
+        tr("Text Files (*.txt);;All Files (*)"));
+
+    if (!filePath.isEmpty()) {
+        QSaveFile file(filePath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out << ui_->outputBox->toPlainText();
+            if (file.commit()) {
+                QMessageBox::information(this, tr("Save Translation"),
+                    tr("Translation saved successfully to:\n%1").arg(filePath));
+            } else {
+                QMessageBox::warning(this, tr("Save Error"),
+                    tr("Failed to save translation to:\n%1").arg(filePath));
+            }
+        } else {
+            QMessageBox::warning(this, tr("Save Error"),
+                tr("Could not open file for writing:\n%1").arg(filePath));
+        }
+    }
+}
+
+void MainWindow::on_actionExit_triggered() {
+    close();
 }
