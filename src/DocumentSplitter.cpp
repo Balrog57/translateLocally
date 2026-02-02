@@ -13,12 +13,9 @@
 #include <archive_entry.h>
 
 #ifdef HAVE_POPPLER
-#include <QtGlobal>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <poppler-qt6.h>
-#else
-#include <poppler-qt5.h>
-#endif
+// Use C++ API of Poppler to avoid Qt version conflicts
+#include <poppler-document.h>
+#include <poppler-page.h>
 #endif
 
 DocumentSplitter::DocumentSplitter(QObject *parent) : QObject(parent) {}
@@ -421,7 +418,13 @@ QString DocumentSplitter::convertPdfToDocx(const QString &pdfPath) {
 }
 
 QList<DocumentSplitter::Segment> DocumentSplitter::splitPdf(const QString &filePath) {
-    // Convert PDF to DOCX using LibreOffice
+#ifdef HAVE_POPPLER
+    // Use Poppler for direct PDF text extraction
+    qDebug() << "Using Poppler for PDF processing";
+    return splitPdfWithPoppler(filePath);
+#else
+    // Fallback to LibreOffice conversion
+    qDebug() << "Using LibreOffice for PDF processing";
     QString docxPath = convertPdfToDocx(filePath);
     if (docxPath.isEmpty()) {
         return {};
@@ -441,4 +444,54 @@ QList<DocumentSplitter::Segment> DocumentSplitter::splitPdf(const QString &fileP
     QDir(docxInfo.path()).removeRecursively();
 
     return segments;
+#endif
 }
+
+#ifdef HAVE_POPPLER
+QList<DocumentSplitter::Segment> DocumentSplitter::splitPdfWithPoppler(const QString &filePath) {
+    // Load PDF document using Poppler C++ API (no Qt dependency)
+    std::unique_ptr<poppler::document> doc(poppler::document::load_from_file(filePath.toStdString()));
+
+    if (!doc || doc->is_locked()) {
+        emit error(tr("Could not open PDF file or PDF is locked: %1").arg(filePath));
+        return {};
+    }
+
+    // Extract text from all pages
+    QString fullText;
+    int numPages = doc->pages();
+
+    for (int i = 0; i < numPages; ++i) {
+        std::unique_ptr<poppler::page> page(doc->create_page(i));
+        if (page) {
+            // Extract text as UTF-8 byte vector
+            std::vector<char> text_bytes = page->text().to_utf8();
+
+            // Convert to QString
+            std::string text_str(text_bytes.begin(), text_bytes.end());
+            QString pageText = QString::fromStdString(text_str);
+
+            fullText += pageText;
+            fullText += "\n\n";  // Separate pages
+        }
+
+        emit progress(i + 1, numPages);
+    }
+
+    if (fullText.trimmed().isEmpty()) {
+        emit error(tr("No text found in PDF document."));
+        return {};
+    }
+
+    // Split the extracted text by paragraphs
+    QList<Segment> segments = splitTextByParagraphs(fullText, MAX_SEGMENT_SIZE);
+
+    // Update identifiers to indicate PDF source
+    for (int i = 0; i < segments.size(); i++) {
+        segments[i].identifier = QString("pdf_poppler_%1").arg(i);
+    }
+
+    qDebug() << "Extracted" << segments.size() << "segments from PDF using Poppler";
+    return segments;
+}
+#endif

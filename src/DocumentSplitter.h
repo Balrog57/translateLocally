@@ -48,6 +48,11 @@ private:
     // LibreOffice integration for PDF
     QString convertPdfToDocx(const QString &pdfPath);
     QString findLibreOfficePath();
+
+#ifdef HAVE_POPPLER
+    // Poppler integration for direct PDF text extraction
+    QList<Segment> splitPdfWithPoppler(const QString &filePath);
+#endif
 };
 
 #endif // DOCUMENTSPLITTER_H

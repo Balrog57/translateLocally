@@ -48,10 +48,20 @@ bool DocumentProcessor::save() {
         QString title = info.completeBaseName();
         return m_merger.mergeToEpub(m_inputPath, m_segments, m_translatedSegments, title, m_outputPath);
     } else if (ext == "pdf") {
-         if (!m_outputPath.toLower().endsWith(".docx")) {
-             qWarning() << "Saving PDF translation as DOCX (PDF export not supported yet).";
-         }
-         return m_merger.mergeToDocx(m_inputPath, m_segments, m_translatedSegments, m_outputPath);
+        // Check if PDF was processed with Poppler (direct text extraction)
+        bool isPopplerPdf = !m_segments.isEmpty() && m_segments.first().identifier.startsWith("pdf_poppler_");
+
+        if (isPopplerPdf) {
+            // Poppler extracts text only - save as TXT
+            qDebug() << "PDF processed with Poppler - saving translation as text file";
+            return m_merger.mergeToTxt(m_translatedSegments, m_outputPath);
+        } else {
+            // LibreOffice converted to DOCX - save as DOCX
+            if (!m_outputPath.toLower().endsWith(".docx")) {
+                qWarning() << "Saving PDF translation as DOCX (PDF export not supported yet).";
+            }
+            return m_merger.mergeToDocx(m_inputPath, m_segments, m_translatedSegments, m_outputPath);
+        }
     }
 
     return false;

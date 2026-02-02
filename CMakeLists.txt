@@ -97,6 +97,41 @@ find_package(Threads REQUIRED) # Cross-platform compatible way to get threads?
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Gui PrintSupport Widgets LinguistTools Network DBus Svg REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Gui PrintSupport Widgets LinguistTools Network DBus Svg REQUIRED)
 
+# Try to find Poppler for PDF support
+# Note: We use Poppler C++ API to avoid Qt version conflicts
+# vcpkg doesn't provide PopplerConfig.cmake, so we search manually
+if(WIN32 AND DEFINED VCPKG_TARGET_TRIPLET)
+    # vcpkg installation - use direct paths
+    # Use C++ API instead of Qt wrapper to avoid Qt version conflicts
+    set(VCPKG_INSTALLED "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+    set(POPPLER_INCLUDE_DIR "${VCPKG_INSTALLED}/include/poppler/cpp")
+    set(POPPLER_LIBRARY "${VCPKG_INSTALLED}/lib/poppler-cpp.lib")
+    set(POPPLER_CORE_LIBRARY "${VCPKG_INSTALLED}/lib/poppler.lib")
+
+    if(EXISTS "${POPPLER_INCLUDE_DIR}/poppler-document.h" AND EXISTS "${POPPLER_LIBRARY}")
+        set(POPPLER_FOUND TRUE)
+        message(STATUS "Poppler found - enabling direct PDF support")
+        message(STATUS "  Include: ${POPPLER_INCLUDE_DIR}")
+        message(STATUS "  Library: ${POPPLER_LIBRARY}")
+        add_definitions(-DHAVE_POPPLER)
+        include_directories(${POPPLER_INCLUDE_DIR})
+    else()
+        set(POPPLER_FOUND FALSE)
+        message(STATUS "Poppler not found - PDF support will require LibreOffice")
+        message(STATUS "  Checked include: ${POPPLER_INCLUDE_DIR}/poppler-document.h")
+        message(STATUS "  Checked library: ${POPPLER_LIBRARY}")
+    endif()
+else()
+    # Standard find_package for non-vcpkg systems
+    find_package(Poppler)
+    if(Poppler_FOUND)
+        message(STATUS "Poppler found - enabling direct PDF support")
+        add_definitions(-DHAVE_POPPLER)
+    else()
+        message(STATUS "Poppler not found - PDF support will require LibreOffice")
+    endif()
+endif()
+
 # Marian submodule things
 # Documentation: https://cliutils.gitlab.io/modern-cmake/chapters/projects/submodule.html
 # Ensures the submodules are set correctly during a build.
@@ -254,6 +289,17 @@ set(LINK_LIBRARIES
     ${CMAKE_THREAD_LIBS_INIT} # This should work on all platforms?
     ${LibArchive_LIBRARIES}
     ${CMAKE_DL_LIBS}) # On unix necessary sometimes
+
+# Add Poppler if available
+if(POPPLER_FOUND)
+    if(WIN32 AND DEFINED VCPKG_TARGET_TRIPLET)
+        # vcpkg manual linking - link both Qt wrapper and core library
+        list(APPEND LINK_LIBRARIES ${POPPLER_LIBRARY} ${POPPLER_CORE_LIBRARY})
+    else()
+        # Standard CMake target
+        list(APPEND LINK_LIBRARIES Poppler::Qt${QT_VERSION_MAJOR})
+    endif()
+endif()
 
 # Reserve the translateLocally name for the MacOS executables. Rename the Linux and Windows executable to translateLocally after compilation
 target_link_libraries(translateLocally-bin PRIVATE ${LINK_LIBRARIES})
