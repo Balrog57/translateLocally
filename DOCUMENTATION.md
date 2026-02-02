@@ -1,6 +1,126 @@
-# Document Processing and AI-Powered Translation
+# translateLocally Enhanced - Documentation
 
-translateLocally now supports translating entire documents (DOCX, EPUB, PDF, TXT) with optional AI-powered improvement of machine translations.
+**A fork of [translateLocally](https://github.com/XapaJIaMnu/translateLocally) with document processing and AI-powered translation improvement.**
+
+## What's New in This Fork
+
+This enhanced version of translateLocally adds professional document translation capabilities and AI-powered post-editing while maintaining full compatibility with the original project.
+
+### Major Improvements Over Original
+
+| Feature | Original translateLocally | This Enhanced Fork |
+|---------|--------------------------|-------------------|
+| **Document Support** | Plain text only (stdin/stdout) | DOCX, EPUB, PDF, TXT with structure preservation |
+| **Large File Handling** | 10 MB hard limit | Automatic splitting for unlimited file sizes |
+| **Translation Quality** | Marian neural translation only | Optional AI improvement via local/cloud LLMs |
+| **Structure Preservation** | N/A | Full XHTML/HTML/XML structure preservation |
+| **GUI Document Processing** | Not available | File menu, progress dialogs, real-time updates |
+| **EPUB Support** | Not available | Professional e-book translation with DOM preservation |
+| **AI Integration** | Not available | 5 providers (Ollama, LM Studio, OpenAI, Claude, Gemini) |
+| **Progress Tracking** | Basic console output | Real-time GUI progress bars with segment tracking |
+
+### Key Technical Innovations
+
+#### 1. Document Processing Architecture
+- **DocumentSplitter**: Intelligent segmentation of documents into ≤8MB chunks
+  - TXT: Paragraph-based splitting with structure preservation
+  - DOCX: ZIP/XML parsing via libarchive
+  - EPUB: XHTML parsing with full DOM preservation
+  - PDF: LibreOffice conversion pipeline
+
+- **DocumentMerger**: Reconstruction with perfect structure preservation
+  - EPUB: Word-based text replacement algorithm preserving all HTML tags, CSS classes, and formatting
+  - DOCX: Full ZIP archive rebuilding with metadata preservation
+  - Archive formats: Maintains non-text content (images, stylesheets, metadata)
+
+- **DocumentProcessor**: High-level orchestration API
+  - Simple workflow: `open()` → `getSegments()` → `setTranslatedSegments()` → `save()`
+  - Thread-safe design for GUI integration
+
+#### 2. AI-Powered Translation Improvement
+- **LLMInterface**: Unified abstraction for 5 AI providers
+  - **Local**: Ollama (http://localhost:11434), LM Studio (http://localhost:1234)
+  - **Cloud**: OpenAI, Claude (Anthropic), Gemini (Google)
+
+- **Synchronized Chunking**: 2000-character chunks (~600-700 tokens) with source/translation alignment to prevent text mismatches
+
+- **Sequential Processing**: maxConcurrent=1 for local LLM stability
+
+- **Optimized Prompts**: Engineered to minimize verbosity and reasoning artifacts
+
+#### 3. GUI Integration
+- **File Menu**: "Open Document" and "Save Translation" actions with keyboard shortcuts
+- **Settings Dialog**: New "AI Improvement" tab with provider configuration
+- **Document Translation Dialog**: Real-time progress bars for translation and AI improvement phases
+- **Worker Thread Architecture**: Non-blocking UI during long-running translations
+
+#### 4. Structure Preservation Breakthroughs
+- **EPUB XHTML Preservation**: Full DOM traversal algorithm
+  - Preserves all tags: `<h1>`, `<h2>`, `<p>`, `<div>`, `<span>`, etc.
+  - Maintains CSS classes, inline styles, and stylesheet links
+  - Keeps chapter structure, TOC, metadata, cover images
+  - Only text nodes are replaced, all markup intact
+
+- **Word-Based Replacement**: Proportional distribution of translated words across text nodes
+  - Counts words in original text nodes
+  - Distributes corresponding translated words
+  - Preserves leading/trailing whitespace patterns
+
+#### 5. Settings Persistence
+New configuration parameters in QSettings:
+```cpp
+llmEnabled          // Enable/disable AI improvement
+llmProvider         // "Ollama", "LM Studio", "OpenAI", "Claude", "Gemini"
+llmUrl              // Provider endpoint URL
+llmModel            // Model identifier
+openaiApiKey        // OpenAI authentication
+claudeApiKey        // Claude authentication
+geminiApiKey        // Gemini authentication
+```
+
+### Files Added to Original Codebase
+
+**Core Document Processing (8 files):**
+- [src/DocumentSplitter.h](src/DocumentSplitter.h) (52 lines)
+- [src/DocumentSplitter.cpp](src/DocumentSplitter.cpp) (493 lines)
+- [src/DocumentMerger.h](src/DocumentMerger.h) (48 lines)
+- [src/DocumentMerger.cpp](src/DocumentMerger.cpp) (354 lines)
+- [src/DocumentProcessor.h](src/DocumentProcessor.h) (31 lines)
+- [src/DocumentProcessor.cpp](src/DocumentProcessor.cpp) (66 lines)
+- [src/LLMInterface.h](src/LLMInterface.h) (68 lines)
+- [src/LLMInterface.cpp](src/LLMInterface.cpp) (459 lines)
+
+**GUI Integration (3 files):**
+- [src/DocumentTranslationDialog.h](src/DocumentTranslationDialog.h) (70 lines)
+- [src/DocumentTranslationDialog.cpp](src/DocumentTranslationDialog.cpp) (200 lines)
+- [src/DocumentTranslationDialog.ui](src/DocumentTranslationDialog.ui) (120 lines)
+
+**Modified Files:**
+- [CMakeLists.txt](CMakeLists.txt): Added 11 new source files
+- [src/cli/CLIParsing.h](src/cli/CLIParsing.h): Added `--ai-improve` flag
+- [src/cli/CommandLineIface.h](src/cli/CommandLineIface.h): Document processing methods
+- [src/cli/CommandLineIface.cpp](src/cli/CommandLineIface.cpp): Document translation logic
+- [src/settings/Settings.h](src/settings/Settings.h): 7 new LLM settings
+- [src/settings/Settings.cpp](src/settings/Settings.cpp): Settings initialization
+- [src/mainwindow.ui](src/mainwindow.ui): File menu with document actions
+- [src/mainwindow.h](src/mainwindow.h): Document dialog slots
+- [src/mainwindow.cpp](src/mainwindow.cpp): File menu handlers
+- [src/settings/TranslatorSettingsDialog.ui](src/settings/TranslatorSettingsDialog.ui): AI Improvement tab
+- [src/settings/TranslatorSettingsDialog.h](src/settings/TranslatorSettingsDialog.h): LLM settings slots
+- [src/settings/TranslatorSettingsDialog.cpp](src/settings/TranslatorSettingsDialog.cpp): LLM configuration logic
+
+**Total Addition:** ~2,200 lines of new code
+
+### Compatibility with Original
+
+This fork maintains **100% backward compatibility** with the original translateLocally:
+- All original CLI commands work unchanged
+- Existing models and settings are preserved
+- Original GUI functionality intact
+- New features are purely additive (opt-in via `--ai-improve` flag or GUI actions)
+- Same build system, dependencies, and distribution model
+
+---
 
 ## Table of Contents
 
@@ -29,6 +149,14 @@ Improve translation quality using a local AI model (requires Ollama or LM Studio
 ```bash
 translateLocally -m en-fr-tiny -i document.docx -o document_fr.docx --ai-improve
 ```
+
+### GUI Document Translation
+
+1. **File → Open Document** (Ctrl+O)
+2. Select DOCX, EPUB, PDF, or TXT file
+3. Choose output path
+4. Click "Start Translation"
+5. Watch real-time progress bars for translation and AI improvement
 
 ## Supported Formats
 
@@ -187,6 +315,20 @@ llmProvider=Ollama
 llmUrl=http://localhost:11434
 llmModel=mistral
 ```
+
+### GUI Configuration
+
+1. Open translateLocally
+2. Go to Settings (Edit → Preferences)
+3. Navigate to "AI Improvement" tab
+4. Configure:
+   - Enable AI improvement checkbox
+   - Select provider from dropdown
+   - Enter server URL (for local providers)
+   - Select or enter model name
+   - Enter API key (for cloud providers)
+5. Click "Test Connection" to verify
+6. Click "Apply" to save
 
 ## Advanced Usage
 
@@ -386,7 +528,7 @@ A: Varies by provider. GPT-4o-mini costs ~$0.15 per million input tokens. A 10,0
 A: Yes, but quality depends on the AI model's training. English, French, German, Spanish, Italian, Portuguese, Chinese, and Japanese typically work best.
 
 **Q: Can I disable AI improvement for specific documents?**
-A: Yes, simply omit the `--ai-improve` flag.
+A: Yes, simply omit the `--ai-improve` flag or uncheck the option in the GUI.
 
 **Q: What happens to images in DOCX/EPUB files?**
 A: Images and other binary content are preserved unchanged in the output document.
@@ -397,13 +539,27 @@ A: No, remove password protection first.
 **Q: Is my text sent to the internet when using local LLMs?**
 A: No, local LLMs (Ollama, LM Studio) process everything on your machine.
 
+**Q: Are these features compatible with the original translateLocally?**
+A: Yes! This is a 100% backward-compatible fork. All original functionality works unchanged. New features are purely additive.
+
+**Q: Can I contribute these features back to the original project?**
+A: Contributions are welcome! Submit pull requests to the upstream repository at https://github.com/XapaJIaMnu/translateLocally
+
 ## Support and Contributing
 
 For issues, feature requests, or contributions:
-- GitHub: https://github.com/XapaJIaMnu/translateLocally
+- **This Fork**: [Your GitHub repository URL]
+- **Original Project**: https://github.com/XapaJIaMnu/translateLocally
 - Report bugs with sample files (anonymized if needed)
 - Include debug output when reporting issues
 
 ## License
 
-Document processing and AI improvement features are part of translateLocally and follow the same license as the main project.
+Document processing and AI improvement features are part of translateLocally and follow the same license as the original project.
+
+## Credits
+
+- **Original translateLocally**: Developed by XapaJIaMnu and contributors
+- **Bergamot Translator**: Mozilla's browser-based translation project
+- **Marian NMT**: Fast neural machine translation framework
+- **This Fork**: Document processing and AI improvement features
