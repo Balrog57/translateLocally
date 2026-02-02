@@ -75,3 +75,21 @@ build*/
 
 # Qt creator:
 CMakeLists.txt.user
+
+# Claude Code local settings
+.claude/
+
+# Temporary files
+SESSION_LOG.md
+*.patch
+
+# Test files
+*_test.txt
+*_test.docx
+*_test.epub
+*_test.pdf
+*_translated.*
+test_*.txt
+test_*.docx
+test_*.epub
+test_*.pdf
