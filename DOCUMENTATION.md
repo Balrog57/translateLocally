@@ -54,17 +54,18 @@ This enhanced version of translateLocally adds professional document translation
 - **Document Translation Dialog**: Real-time progress bars for translation and AI improvement phases
 - **Worker Thread Architecture**: Non-blocking UI during long-running translations
 
-#### 4. Structure Preservation Breakthroughs
-- **EPUB XHTML Preservation**: Full DOM traversal algorithm
-  - Preserves all tags: `<h1>`, `<h2>`, `<p>`, `<div>`, `<span>`, etc.
-  - Maintains CSS classes, inline styles, and stylesheet links
+#### 4. Structure Preservation Strategy
+- **EPUB XHTML Preservation**: Paragraph-by-paragraph replacement approach
+  - Preserves paragraph structure: `<p>`, heading tags `<h1>`-`<h6>`
+  - Maintains CSS classes, stylesheet links, and document-level formatting
   - Keeps chapter structure, TOC, metadata, cover images
-  - Only text nodes are replaced, all markup intact
+  - **Trade-off**: Inline formatting (`<b>`, `<i>`, `<span>`) within paragraphs is removed to ensure clean text replacement without mangling
 
-- **Word-Based Replacement**: Proportional distribution of translated words across text nodes
-  - Counts words in original text nodes
-  - Distributes corresponding translated words
-  - Preserves leading/trailing whitespace patterns
+- **DOCX Structure Preservation**: Similar paragraph-level approach
+  - Preserves paragraph properties and overall document structure
+  - Maintains document metadata, images, and non-text content
+  - Simplifies text content within each paragraph for reliable translation
+  - **Trade-off**: Complex inline formatting may be simplified, but paragraph-level structure remains intact
 
 #### 5. Settings Persistence
 New configuration parameters in QSettings:
@@ -173,11 +174,12 @@ translateLocally -m en-fr-tiny -i document.docx -o document_fr.docx --ai-improve
 - **Best for**: Formatted documents, reports, letters
 
 ### EPUB (E-books)
-- **Processing method**: ZIP archive extraction and XHTML parsing with DOM preservation
-- **Structure preservation**: **Full XHTML structure maintained** - all HTML tags (`<h1>`, `<h2>`, `<p>`), CSS classes, stylesheet links, chapter structure, formatting, metadata, and cover images preserved
-- **Technical details**: Parses content XHTML files via libarchive, stores original DOM structure, replaces only text nodes during translation
-- **Quality**: Professional-grade output with perfect formatting preservation
-- **Best for**: E-books, digital publications, formatted documents
+- **Processing method**: ZIP archive extraction and XHTML parsing with paragraph detection
+- **Structure preservation**: Document-level structure maintained (chapters, headings, paragraphs, CSS stylesheets, metadata, cover images)
+- **Technical details**: Parses content XHTML files via libarchive, detects paragraph boundaries (`<p>`, `<h1>`-`<h6>`), preserves paragraph tags while replacing text content
+- **Trade-off**: Inline formatting within paragraphs (`<b>`, `<i>`, `<em>`, `<strong>`) is removed to ensure correct translation without text mangling
+- **Quality**: Clean, readable output with reliable paragraph structure - suitable for e-books where content matters more than inline formatting
+- **Best for**: E-books, novels, articles, documentation where paragraph structure is more important than bold/italic formatting
 
 ### PDF (Portable Document Format)
 - **Processing method**: PDF → DOCX conversion via LibreOffice, then DOCX workflow
@@ -383,6 +385,49 @@ translateLocally -m en-fr-tiny -i test.txt -o test_fr_ai.txt --ai-improve
 diff test_fr_noai.txt test_fr_ai.txt
 ```
 
+## Important Notes on Formatting Preservation
+
+### What Is Preserved
+✅ **Document structure**: Chapters, sections, table of contents
+✅ **Paragraph boundaries**: Headings (`<h1>`-`<h6>`), paragraphs (`<p>`) maintain proper structure
+✅ **Document-level formatting**: Stylesheets, CSS classes, fonts, page layout
+✅ **Non-text content**: Images, cover art, metadata, embedded files
+✅ **Archive integrity**: DOCX and EPUB ZIP structure fully maintained
+
+### What Is Not Preserved
+❌ **Inline text formatting**: Bold, italic, underline, font changes within paragraphs
+❌ **Spans and inline styles**: `<b>`, `<i>`, `<em>`, `<strong>`, `<span>` tags within text
+❌ **Complex inline structures**: Nested formatting, hyperlinks within text (document structure links preserved)
+
+### Why This Limitation Exists
+
+This is a **deliberate technical choice** to ensure translation quality:
+
+**Problem with inline formatting preservation:**
+When attempting to preserve inline formatting (e.g., keeping `<b>bold words</b>` bold), we encountered severe issues:
+- **Word-sticking**: Translated words appeared without spaces ("desmodules" instead of "des modules")
+- **Misaligned formatting**: Wrong words received bold/italic (e.g., `<b>simple test</b>` became `<b>document de</b>`)
+- **Duplicate/missing text**: When word counts differed between languages, text appeared twice or disappeared
+- **Mangled structure**: Sentences split mid-word, tags broken (`<it` instead of `<i>`)
+
+**Current solution:**
+- Replace entire paragraph content as a unit
+- Guarantees correct, readable translations without text corruption
+- Maintains document readability and structure integrity
+- Trade-off: Inline formatting within paragraphs is removed
+
+**Best for:**
+- E-books where content readability matters most
+- Documents where paragraph structure is more important than bold/italic
+- Translations where accuracy is critical
+
+**Not ideal for:**
+- Documents with critical formatting (e.g., legal documents with specific bolded clauses)
+- Presentations with heavily formatted text
+- Marketing materials where visual formatting is essential
+
+For these cases, consider manual post-processing to re-apply formatting based on the original document.
+
 ## Troubleshooting
 
 ### Document Processing Issues
@@ -400,8 +445,8 @@ diff test_fr_noai.txt test_fr_ai.txt
 - **Solution**: Install LibreOffice and ensure `soffice.exe` is accessible
 
 **Problem**: DOCX/EPUB structure corrupted after translation
-- **Cause**: ~~Complex document with unusual formatting~~ **FIXED in latest version**
-- **Solution**: Update to latest version (v1.x+) which preserves full XHTML/HTML structure including tags, CSS, and formatting. Older versions may have destroyed structure.
+- **Cause**: ~~Complex document with unusual formatting~~ **FIXED in commit 99e292c**
+- **Solution**: Latest version uses paragraph-by-paragraph approach that prevents text mangling, word-sticking, and duplicate text issues. Structure is preserved at paragraph level (headings, paragraphs maintain proper boundaries). Note: Inline formatting (`<b>`, `<i>`) within paragraphs is removed as a trade-off for correct text replacement.
 
 ### AI Improvement Issues
 

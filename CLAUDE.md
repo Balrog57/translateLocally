@@ -200,8 +200,9 @@ translateLocally now supports full document translation with AI-powered improvem
 - 8MB segment size provides safety margin under 10MB Marian limit
 - Segments preserve original identifiers and XHTML structure for correct document reconstruction
 - Archive-based formats (DOCX, EPUB) maintain all original metadata and non-translated files
-- **EPUB structure preservation**: Original XHTML DOM tree is preserved - only text nodes are replaced with translations while keeping all HTML tags (`<h1>`, `<h2>`, `<p>`), CSS classes, attributes, stylesheet links, and document structure intact
-- Word-based text replacement algorithm distributes translated content proportionally across original text nodes
+- **EPUB structure preservation**: Paragraph-by-paragraph approach preserves document structure (paragraph tags `<p>`, heading tags `<h1>`-`<h6>`, CSS classes, stylesheets, chapter structure, metadata) while replacing text content
+- **Trade-off**: Inline formatting tags (`<b>`, `<i>`, `<span>`, etc.) within paragraphs are removed during translation to ensure correct text replacement without mangling
+- **DOCX structure preservation**: Similar paragraph-level approach - preserves paragraph properties (`<w:pPr>`), runs, and overall document structure while simplifying text content within each paragraph
 
 ### AI-Powered Translation Improvement
 
@@ -283,4 +284,5 @@ Accessed via File → Open Document, provides:
 **Known Limitations:**
 - Model discovery may take a few seconds for local providers
 - Very large documents (>50MB) may take significant time with AI improvement
-- Word-based text replacement may cause minor text overflow between adjacent paragraphs if translation expands significantly, though HTML structure is fully preserved
+- **Inline formatting limitation**: For EPUB and DOCX, inline formatting tags (`<b>`, `<i>`, `<em>`, `<strong>`, `<span>` with styles) within paragraphs are removed during translation. This is a deliberate trade-off to ensure correct text replacement without mangling, word-sticking, or duplicate text. Paragraph-level structure (headings, paragraph breaks, chapters, metadata) is fully preserved.
+- **Technical reasoning**: Early implementations attempted word-by-word distribution across text nodes, which caused severe issues when word counts differed between languages. The current paragraph-by-paragraph approach prioritizes translation accuracy and readability over inline formatting preservation.
