@@ -257,21 +257,36 @@ QList<DocumentSplitter::Segment> DocumentSplitter::splitEpub(const QString &file
         // Store original XHTML content
         QString originalXhtml = QString::fromUtf8(content);
 
-        // Parse HTML to extract text
+        // Parse HTML to extract text, preserving paragraph structure
         QString chapterText;
+        QString currentPara;
         QXmlStreamReader xml(content);
         while (!xml.atEnd()) {
             xml.readNext();
             if (xml.isCharacters()) {
                 QString text = xml.text().toString().trimmed();
                 if (!text.isEmpty()) {
-                    chapterText += text + " ";
+                    currentPara += text + " ";
+                }
+            } else if (xml.isEndElement()) {
+                QString tagName = xml.name().toString();
+                // Detect paragraph/heading end tags
+                if (tagName == "p" || tagName == "h1" || tagName == "h2" ||
+                    tagName == "h3" || tagName == "h4" || tagName == "h5" || tagName == "h6") {
+                    if (!currentPara.trimmed().isEmpty()) {
+                        chapterText += currentPara.trimmed() + "\n";
+                        currentPara.clear();
+                    }
                 }
             }
             if (xml.hasError()) {
                  // Non-fatal, just log
                  // qWarning() << "XML Parse error in" << name << ":" << xml.errorString();
             }
+        }
+        // Add any remaining text
+        if (!currentPara.trimmed().isEmpty()) {
+            chapterText += currentPara.trimmed() + "\n";
         }
 
         if (!chapterText.isEmpty()) {

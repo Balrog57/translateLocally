@@ -69,11 +69,77 @@ bool DocumentMerger::mergeToDocx(const QString &originalDocxPath,
     return rebuildDocxWithTranslation(originalDocxPath, fullTranslation.trimmed(), outputPath);
 }
 
+QString DocumentMerger::replaceTextInWordXml(const QString &originalXml, const QString &translatedText) {
+    // PARAGRAPH-BY-PARAGRAPH: Preserve paragraph structure and properties
+    // Put translated text in first <w:t>, keep paragraph formatting
+
+    if (translatedText.trimmed().isEmpty()) {
+        return originalXml;
+    }
+
+    // Split translated text by newlines (one line = one paragraph from DocumentSplitter)
+    QStringList translatedParas = translatedText.split('\n', Qt::SkipEmptyParts);
+    int transIndex = 0;
+
+    QString result = originalXml;
+
+    // Find all paragraphs with text content
+    QRegularExpression paraPattern("<w:p(\\s[^>]*)?>.*?</w:p>", QRegularExpression::DotMatchesEverythingOption);
+    QRegularExpressionMatchIterator paraIt = paraPattern.globalMatch(originalXml);
+
+    QVector<QPair<int, int>> replacements; // positions
+    QStringList newParas;
+
+    while (paraIt.hasNext()) {
+        QRegularExpressionMatch paraMatch = paraIt.next();
+        QString originalPara = paraMatch.captured(0);
+
+        // Check if paragraph has text content
+        QRegularExpression wtPattern("<w:t[^>]*>([^<]+)</w:t>");
+        if (!wtPattern.match(originalPara).hasMatch()) {
+            continue; // Skip paragraphs without text (e.g., just properties/formatting)
+        }
+
+        // Get next translated paragraph
+        if (transIndex >= translatedParas.size()) {
+            break; // No more translations
+        }
+        QString transPara = translatedParas[transIndex++];
+
+        // Replace: keep paragraph structure, put translated text in FIRST <w:t>, remove others
+        QString newPara = originalPara;
+
+        // Find first <w:t> and replace its content
+        QRegularExpressionMatch firstWt = wtPattern.match(newPara);
+        if (firstWt.hasMatch()) {
+            QString newWt = QString("<w:t xml:space=\"preserve\">%1</w:t>").arg(transPara.toHtmlEscaped());
+            newPara.replace(firstWt.capturedStart(), firstWt.capturedLength(), newWt);
+
+            // Remove all subsequent <w:t> nodes in this paragraph
+            QRegularExpression allWtPattern("<w:t[^>]*>[^<]*</w:t>");
+            int offset = firstWt.capturedStart() + newWt.length();
+            QString afterFirst = newPara.mid(offset);
+            afterFirst.replace(allWtPattern, "");
+            newPara = newPara.left(offset) + afterFirst;
+        }
+
+        replacements.append(qMakePair(paraMatch.capturedStart(), paraMatch.capturedLength()));
+        newParas.append(newPara);
+    }
+
+    // Replace in reverse order to maintain positions
+    for (int i = replacements.size() - 1; i >= 0; i--) {
+        result.replace(replacements[i].first, replacements[i].second, newParas[i]);
+    }
+
+    return result;
+}
+
 bool DocumentMerger::rebuildDocxWithTranslation(const QString &originalPath,
                                                  const QString &translatedText,
                                                  const QString &outputPath) {
     // Strategy: Copy the DOCX and replace text content in word/document.xml
-    // This preserves formatting, styles, etc.
+    // while preserving ALL formatting, styles, tables, images, etc.
 
     struct archive *reader = archive_read_new();
     struct archive *writer = archive_write_new();
@@ -94,10 +160,6 @@ bool DocumentMerger::rebuildDocxWithTranslation(const QString &originalPath,
         return false;
     }
 
-    // Split translated text into paragraphs for replacement
-    QStringList translatedParagraphs = translatedText.split('\n', Qt::KeepEmptyParts);
-    int paraIndex = 0;
-
     while (archive_read_next_header(reader, &entry) == ARCHIVE_OK) {
         QString entryName = QString::fromUtf8(archive_entry_pathname(entry));
 
@@ -108,60 +170,18 @@ bool DocumentMerger::rebuildDocxWithTranslation(const QString &originalPath,
             originalContent.resize(size);
             archive_read_data(reader, originalContent.data(), size);
 
-            // Parse and replace text content
-            QString modifiedXml;
-            QXmlStreamReader xmlReader(originalContent);
-            QXmlStreamWriter xmlWriter(&modifiedXml);
+            // Replace text in XML while preserving structure
+            QString originalXml = QString::fromUtf8(originalContent);
+            QString modifiedXml = replaceTextInWordXml(originalXml, translatedText);
 
-            while (!xmlReader.atEnd()) {
-                xmlReader.readNext();
-
-                if (xmlReader.isStartElement()) {
-                    xmlWriter.writeStartElement(xmlReader.namespaceUri().toString(), xmlReader.name().toString());
-                    xmlWriter.writeAttributes(xmlReader.attributes());
-                } else if (xmlReader.isEndElement()) {
-                    xmlWriter.writeEndElement();
-                } else if (xmlReader.isCharacters()) {
-                    if (xmlReader.text().toString().trimmed().isEmpty()) {
-                        xmlWriter.writeCharacters(xmlReader.text().toString());
-                    } else {
-                        // Replace with translated text
-                        if (paraIndex < translatedParagraphs.size()) {
-                            // Try to map original text blocks to translated paragraphs
-                            // This is a simplified approach - for complex docs, more sophisticated mapping needed
-                            xmlWriter.writeCharacters(xmlReader.text().toString()); // Keep original for now
-                        } else {
-                            xmlWriter.writeCharacters(xmlReader.text().toString());
-                        }
-                    }
-                } else if (xmlReader.isComment()) {
-                    xmlWriter.writeComment(xmlReader.text().toString());
-                } else if (xmlReader.isCDATA()) {
-                    xmlWriter.writeCDATA(xmlReader.text().toString());
-                }
-            }
-
-            // For now, use a simpler approach: create new document with translated paragraphs
-            // preserving basic DOCX structure
-            QString newDocXml = QString(R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>
-)");
-            for (const QString &para : translatedParagraphs) {
-                if (!para.trimmed().isEmpty()) {
-                    newDocXml += QString("<w:p><w:r><w:t>%1</w:t></w:r></w:p>\n").arg(para.toHtmlEscaped());
-                }
-            }
-            newDocXml += "</w:body></w:document>";
-
-            QByteArray newContent = newDocXml.toUtf8();
+            QByteArray newContent = modifiedXml.toUtf8();
 
             // Write modified entry
             archive_entry_set_size(entry, newContent.size());
             archive_write_header(writer, entry);
             archive_write_data(writer, newContent.constData(), newContent.size());
         } else {
-            // Copy other entries unchanged
+            // Copy other entries unchanged (styles, images, etc.)
             size_t size = archive_entry_size(entry);
             archive_write_header(writer, entry);
 
@@ -201,73 +221,76 @@ bool DocumentMerger::mergeToEpub(const QString &originalEpubPath,
 }
 
 QString DocumentMerger::replaceTextInXhtml(const QString &originalXhtml, const QString &translatedText) {
-    // Parse the original XHTML and replace text nodes with translated content
-    // Strategy: Split translated text into words and distribute across text nodes proportionally
+    // PARAGRAPH-BY-PARAGRAPH APPROACH for EPUB: Similar to DOCX
+    // Preserve paragraph structure, replace text content while keeping HTML tags
 
-    // Split translated text into words
-    QStringList translatedWords = translatedText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-    int wordIndex = 0;
-
-    // Rebuild XHTML with translated text nodes
-    QString result;
-    QXmlStreamReader xmlReader(originalXhtml);
-    QXmlStreamWriter xmlWriter(&result);
-    xmlWriter.setAutoFormatting(true);
-    xmlWriter.setAutoFormattingIndent(2);
-
-    while (!xmlReader.atEnd()) {
-        xmlReader.readNext();
-
-        if (xmlReader.isStartDocument()) {
-            xmlWriter.writeStartDocument();
-        } else if (xmlReader.isDTD()) {
-            xmlWriter.writeDTD(xmlReader.text().toString());
-        } else if (xmlReader.isStartElement()) {
-            xmlWriter.writeStartElement(xmlReader.namespaceUri().toString(), xmlReader.name().toString());
-            xmlWriter.writeAttributes(xmlReader.attributes());
-        } else if (xmlReader.isEndElement()) {
-            xmlWriter.writeEndElement();
-        } else if (xmlReader.isCharacters()) {
-            QString originalText = xmlReader.text().toString();
-            if (originalText.trimmed().isEmpty()) {
-                // Preserve whitespace-only text nodes
-                xmlWriter.writeCharacters(originalText);
-            } else {
-                // Replace with translated text
-                // Count words in original text node to know how many translated words to use
-                QStringList originalWords = originalText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-                int wordCount = originalWords.size();
-
-                // Extract corresponding translated words
-                QStringList replacementWords;
-                for (int i = 0; i < wordCount && wordIndex < translatedWords.size(); i++) {
-                    replacementWords.append(translatedWords[wordIndex++]);
-                }
-
-                // Preserve leading/trailing whitespace from original
-                bool hasLeadingSpace = originalText.startsWith(' ') || originalText.startsWith('\n') || originalText.startsWith('\t');
-                bool hasTrailingSpace = originalText.endsWith(' ') || originalText.endsWith('\n') || originalText.endsWith('\t');
-
-                QString replacement = replacementWords.join(" ");
-                if (hasLeadingSpace && !replacement.isEmpty()) replacement = " " + replacement;
-                if (hasTrailingSpace && !replacement.isEmpty()) replacement = replacement + " ";
-
-                xmlWriter.writeCharacters(replacement);
-            }
-        } else if (xmlReader.isComment()) {
-            xmlWriter.writeComment(xmlReader.text().toString());
-        } else if (xmlReader.isCDATA()) {
-            xmlWriter.writeCDATA(xmlReader.text().toString());
-        }
+    if (translatedText.trimmed().isEmpty()) {
+        return originalXhtml;
     }
 
-    if (xmlReader.hasError()) {
-        qWarning() << "XML parsing error:" << xmlReader.errorString();
-        // Fallback: create simple structure
-        return QString(R"(<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<body><p>%1</p></body></html>)").arg(translatedText.toHtmlEscaped());
+    // Split translated text by newlines (DocumentSplitter concatenates with \n)
+    QStringList translatedParas = translatedText.split('\n', Qt::SkipEmptyParts);
+    int transIndex = 0;
+
+    QString result = originalXhtml;
+
+    // Find all <p>, <h1>, <h2>, <h3>, <h4>, <h5>, <h6> elements
+    // Pattern matches: <tag ...> content </tag>
+    QRegularExpression paraPattern("<(p|h[1-6])(\\s[^>]*)?>.*?</\\1>",
+                                    QRegularExpression::DotMatchesEverythingOption);
+    QRegularExpressionMatchIterator paraIt = paraPattern.globalMatch(originalXhtml);
+
+    QVector<QPair<int, int>> replacements;
+    QStringList newParas;
+
+    while (paraIt.hasNext() && transIndex < translatedParas.size()) {
+        QRegularExpressionMatch paraMatch = paraIt.next();
+        QString originalPara = paraMatch.captured(0);
+        QString tagName = paraMatch.captured(1); // p, h1, h2, etc.
+        QString tagAttrs = paraMatch.captured(2); // attributes
+
+        // Extract text content from this paragraph (strip all tags)
+        QString paraText;
+        QRegularExpression tagPattern("<[^>]+>");
+        paraText = originalPara;
+        paraText.remove(tagPattern); // Remove all HTML tags
+        paraText = paraText.trimmed();
+
+        // Skip empty paragraphs
+        if (paraText.isEmpty()) {
+            continue;
+        }
+
+        // Get corresponding translated paragraph
+        QString transPara = translatedParas[transIndex++].trimmed();
+        if (transPara.isEmpty()) {
+            transPara = " "; // Keep structure, insert space
+        }
+
+        // Rebuild paragraph: For simplicity, replace ALL content between opening and closing tag
+        // This preserves the paragraph tag itself but loses inline formatting
+        // Future improvement: preserve <b>, <i>, etc. tags with more sophisticated parsing
+        QString newPara = originalPara;
+
+        // Pattern to match: <tag...>CONTENT</tag>
+        // We want to replace CONTENT with the translated text
+        QRegularExpression contentPattern(QString("(<(%1)([^>]*)>).*?(</\\2>)")
+                                          .arg(tagName),
+                                          QRegularExpression::DotMatchesEverythingOption);
+        QRegularExpressionMatch contentMatch = contentPattern.match(originalPara);
+
+        if (contentMatch.hasMatch()) {
+            // Build: <opening tag>translated text</closing tag>
+            newPara = contentMatch.captured(1) + transPara + contentMatch.captured(4);
+        }
+
+        replacements.append(qMakePair(paraMatch.capturedStart(), paraMatch.capturedLength()));
+        newParas.append(newPara);
+    }
+
+    // Replace paragraphs in reverse order to maintain positions
+    for (int i = replacements.size() - 1; i >= 0; i--) {
+        result.replace(replacements[i].first, replacements[i].second, newParas[i]);
     }
 
     return result;

@@ -44,6 +44,9 @@ private:
                                     const QString &title,
                                     const QString &outputPath);
 
+    // Helper to replace text nodes in Word XML while preserving structure
+    QString replaceTextInWordXml(const QString &originalXml, const QString &translatedText);
+
     // Helper to replace text nodes in XHTML while preserving structure
     QString replaceTextInXhtml(const QString &originalXhtml, const QString &translatedText);
 };
