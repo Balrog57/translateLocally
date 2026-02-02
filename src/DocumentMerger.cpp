@@ -189,17 +189,93 @@ bool DocumentMerger::mergeToEpub(const QString &originalEpubPath,
                                   const QString &outputPath) {
     Q_UNUSED(title);
 
-    // Build a map from identifier to translated text
+    // Build a map from identifier to translated text and original XHTML
     QMap<QString, QString> chapterTranslations;
+    QMap<QString, QString> chapterOriginalXhtml;
     for (int i = 0; i < translatedSegments.size() && i < originalSegments.size(); i++) {
         chapterTranslations[originalSegments[i].identifier] = translatedSegments[i].text;
+        chapterOriginalXhtml[originalSegments[i].identifier] = originalSegments[i].originalXhtml;
     }
 
-    return rebuildEpubWithTranslation(originalEpubPath, chapterTranslations, title, outputPath);
+    return rebuildEpubWithTranslation(originalEpubPath, chapterTranslations, chapterOriginalXhtml, title, outputPath);
+}
+
+QString DocumentMerger::replaceTextInXhtml(const QString &originalXhtml, const QString &translatedText) {
+    // Parse the original XHTML and replace text nodes with translated content
+    // Strategy: Split translated text into words and distribute across text nodes proportionally
+
+    // Split translated text into words
+    QStringList translatedWords = translatedText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    int wordIndex = 0;
+
+    // Rebuild XHTML with translated text nodes
+    QString result;
+    QXmlStreamReader xmlReader(originalXhtml);
+    QXmlStreamWriter xmlWriter(&result);
+    xmlWriter.setAutoFormatting(true);
+    xmlWriter.setAutoFormattingIndent(2);
+
+    while (!xmlReader.atEnd()) {
+        xmlReader.readNext();
+
+        if (xmlReader.isStartDocument()) {
+            xmlWriter.writeStartDocument();
+        } else if (xmlReader.isDTD()) {
+            xmlWriter.writeDTD(xmlReader.text().toString());
+        } else if (xmlReader.isStartElement()) {
+            xmlWriter.writeStartElement(xmlReader.namespaceUri().toString(), xmlReader.name().toString());
+            xmlWriter.writeAttributes(xmlReader.attributes());
+        } else if (xmlReader.isEndElement()) {
+            xmlWriter.writeEndElement();
+        } else if (xmlReader.isCharacters()) {
+            QString originalText = xmlReader.text().toString();
+            if (originalText.trimmed().isEmpty()) {
+                // Preserve whitespace-only text nodes
+                xmlWriter.writeCharacters(originalText);
+            } else {
+                // Replace with translated text
+                // Count words in original text node to know how many translated words to use
+                QStringList originalWords = originalText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+                int wordCount = originalWords.size();
+
+                // Extract corresponding translated words
+                QStringList replacementWords;
+                for (int i = 0; i < wordCount && wordIndex < translatedWords.size(); i++) {
+                    replacementWords.append(translatedWords[wordIndex++]);
+                }
+
+                // Preserve leading/trailing whitespace from original
+                bool hasLeadingSpace = originalText.startsWith(' ') || originalText.startsWith('\n') || originalText.startsWith('\t');
+                bool hasTrailingSpace = originalText.endsWith(' ') || originalText.endsWith('\n') || originalText.endsWith('\t');
+
+                QString replacement = replacementWords.join(" ");
+                if (hasLeadingSpace && !replacement.isEmpty()) replacement = " " + replacement;
+                if (hasTrailingSpace && !replacement.isEmpty()) replacement = replacement + " ";
+
+                xmlWriter.writeCharacters(replacement);
+            }
+        } else if (xmlReader.isComment()) {
+            xmlWriter.writeComment(xmlReader.text().toString());
+        } else if (xmlReader.isCDATA()) {
+            xmlWriter.writeCDATA(xmlReader.text().toString());
+        }
+    }
+
+    if (xmlReader.hasError()) {
+        qWarning() << "XML parsing error:" << xmlReader.errorString();
+        // Fallback: create simple structure
+        return QString(R"(<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body><p>%1</p></body></html>)").arg(translatedText.toHtmlEscaped());
+    }
+
+    return result;
 }
 
 bool DocumentMerger::rebuildEpubWithTranslation(const QString &originalPath,
                                                  const QMap<QString, QString> &chapterTranslations,
+                                                 const QMap<QString, QString> &chapterOriginalXhtml,
                                                  const QString &title,
                                                  const QString &outputPath) {
     Q_UNUSED(title);
@@ -239,36 +315,36 @@ bool DocumentMerger::rebuildEpubWithTranslation(const QString &originalPath,
 
             // Get the translated text for this chapter
             QString translated;
+            QString originalXhtml;
             if (chapterTranslations.contains(entryName)) {
                 translated = chapterTranslations[entryName];
+                originalXhtml = chapterOriginalXhtml.value(entryName);
             } else {
                 // Collect all parts
                 for (int i = 0; ; i++) {
                     QString partKey = QString("%1_part%2").arg(entryName).arg(i);
                     if (chapterTranslations.contains(partKey)) {
                         translated += chapterTranslations[partKey] + " ";
+                        if (i == 0) {
+                            originalXhtml = chapterOriginalXhtml.value(partKey);
+                        }
                     } else {
                         break;
                     }
                 }
             }
 
-            // Create new XHTML with translated content
-            QString newXhtml = QString(R"(<?xml version="1.0" encoding="UTF-8"?>
+            // Preserve original XHTML structure, replacing only text nodes
+            QString newXhtml;
+            if (!originalXhtml.isEmpty()) {
+                newXhtml = replaceTextInXhtml(originalXhtml, translated);
+            } else {
+                // Fallback if no original XHTML stored (shouldn't happen with new code)
+                newXhtml = QString(R"(<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <title>Translated Chapter</title>
-  <style>body { font-family: serif; line-height: 1.6; margin: 2em; }</style>
-</head>
-<body>
-)");
-            // Split by sentences/paragraphs and wrap in <p> tags
-            QStringList paragraphs = translated.split(QRegularExpression("\\n+"), Qt::SkipEmptyParts);
-            for (const QString &para : paragraphs) {
-                newXhtml += QString("<p>%1</p>\n").arg(para.toHtmlEscaped());
+<body><p>%1</p></body></html>)").arg(translated.toHtmlEscaped());
             }
-            newXhtml += "</body></html>";
 
             QByteArray newContent = newXhtml.toUtf8();
             archive_entry_set_size(entry, newContent.size());

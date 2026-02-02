@@ -254,6 +254,9 @@ QList<DocumentSplitter::Segment> DocumentSplitter::splitEpub(const QString &file
 
         qDebug() << "Read" << content.size() << "bytes from" << name;
 
+        // Store original XHTML content
+        QString originalXhtml = QString::fromUtf8(content);
+
         // Parse HTML to extract text
         QString chapterText;
         QXmlStreamReader xml(content);
@@ -274,13 +277,18 @@ QList<DocumentSplitter::Segment> DocumentSplitter::splitEpub(const QString &file
         if (!chapterText.isEmpty()) {
             // Check if this chapter needs further splitting
             if (chapterText.toUtf8().size() > MAX_SEGMENT_SIZE) {
-                // Split large chapter
+                // Split large chapter - for now, store original XHTML in first part only
+                // This is a limitation: proper splitting would require DOM manipulation
                 qDebug() << "Chapter too large (" << chapterText.size() << "), splitting by paragraphs...";
                 QList<Segment> chapterSegments = splitTextByParagraphs(chapterText, MAX_SEGMENT_SIZE);
                 for (int i = 0; i < chapterSegments.size(); i++) {
                     Segment seg = chapterSegments[i];
                     seg.identifier = QString("%1_part%2").arg(name).arg(i);
                     seg.index = segmentIndex++;
+                    // Store original XHTML only in first part (limitation of current approach)
+                    if (i == 0) {
+                        seg.originalXhtml = originalXhtml;
+                    }
                     segments.append(seg);
                 }
             } else {
@@ -289,6 +297,7 @@ QList<DocumentSplitter::Segment> DocumentSplitter::splitEpub(const QString &file
                 seg.identifier = name;
                 seg.index = segmentIndex++;
                 seg.originalSize = chapterText.toUtf8().size();
+                seg.originalXhtml = originalXhtml;  // Store original XHTML structure
                 segments.append(seg);
             }
 

@@ -40,8 +40,12 @@ private:
     // Helper to rebuild EPUB with translated chapters
     bool rebuildEpubWithTranslation(const QString &originalPath,
                                     const QMap<QString, QString> &chapterTranslations,
+                                    const QMap<QString, QString> &chapterOriginalXhtml,
                                     const QString &title,
                                     const QString &outputPath);
+
+    // Helper to replace text nodes in XHTML while preserving structure
+    QString replaceTextInXhtml(const QString &originalXhtml, const QString &translatedText);
 };
 
 #endif // DOCUMENTMERGER_H

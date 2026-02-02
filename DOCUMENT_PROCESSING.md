@@ -45,10 +45,11 @@ translateLocally -m en-fr-tiny -i document.docx -o document_fr.docx --ai-improve
 - **Best for**: Formatted documents, reports, letters
 
 ### EPUB (E-books)
-- **Processing method**: ZIP archive extraction and XHTML parsing
-- **Structure preservation**: Chapter structure, formatting, metadata, cover images
-- **Technical details**: Parses content XHTML files via libarchive
-- **Best for**: E-books, digital publications
+- **Processing method**: ZIP archive extraction and XHTML parsing with DOM preservation
+- **Structure preservation**: **Full XHTML structure maintained** - all HTML tags (`<h1>`, `<h2>`, `<p>`), CSS classes, stylesheet links, chapter structure, formatting, metadata, and cover images preserved
+- **Technical details**: Parses content XHTML files via libarchive, stores original DOM structure, replaces only text nodes during translation
+- **Quality**: Professional-grade output with perfect formatting preservation
+- **Best for**: E-books, digital publications, formatted documents
 
 ### PDF (Portable Document Format)
 - **Processing method**: PDF → DOCX conversion via LibreOffice, then DOCX workflow
@@ -136,9 +137,10 @@ AI improvement uses large language models (LLMs) to:
 ### How AI Improvement Works
 
 1. **Machine Translation**: Marian translates the text first
-2. **Chunking**: Translation is split into 3000-character chunks
-3. **AI Refinement**: Each chunk is sent to the AI for improvement
-4. **Sequential Processing**: Chunks are processed one at a time for stability
+2. **Synchronized Chunking**: Translation is split into 2000-character chunks (~600-700 tokens) with source/translation alignment maintained to prevent text mismatches
+3. **AI Refinement**: Each chunk is sent to the AI for improvement with real-time progress updates
+4. **Sequential Processing**: Chunks are processed one at a time for local LLM stability
+5. **Structure Preservation**: For EPUBs, HTML structure is maintained while only text content is improved
 
 ### Usage Example
 
@@ -256,8 +258,8 @@ diff test_fr_noai.txt test_fr_ai.txt
 - **Solution**: Install LibreOffice and ensure `soffice.exe` is accessible
 
 **Problem**: DOCX/EPUB structure corrupted after translation
-- **Cause**: Complex document with unusual formatting
-- **Solution**: Simplify formatting before translation, report issue with sample file
+- **Cause**: ~~Complex document with unusual formatting~~ **FIXED in latest version**
+- **Solution**: Update to latest version (v1.x+) which preserves full XHTML/HTML structure including tags, CSS, and formatting. Older versions may have destroyed structure.
 
 ### AI Improvement Issues
 

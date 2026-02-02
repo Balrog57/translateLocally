@@ -79,10 +79,21 @@ void DocumentTranslationWorker::process() {
 
         // AI improvement if enabled
         if (useAI && !translatedText.isEmpty()) {
-            emit llmProgress(i + 1, total,
+            emit llmProgress(0, 100,
                 tr("AI improving segment %1 of %2...").arg(i + 1).arg(total));
 
             QEventLoop aiLoop;
+
+            // Connect to chunk-level progress updates
+            QMetaObject::Connection aiProgress = QObject::connect(
+                llm_, &LLMInterface::verificationProgress,
+                [&](int completed, int totalChunks) {
+                    int percentage = (totalChunks > 0) ? (completed * 100 / totalChunks) : 0;
+                    emit llmProgress(percentage, 100,
+                        tr("AI improving segment %1 of %2 (chunk %3/%4)...")
+                            .arg(i + 1).arg(total).arg(completed).arg(totalChunks));
+                });
+
             QMetaObject::Connection aiConn = QObject::connect(
                 llm_, &LLMInterface::verificationReady,
                 [&](QString suggestion) {
@@ -102,6 +113,7 @@ void DocumentTranslationWorker::process() {
             llm_->verifyTranslation(seg.text, translatedText);
             aiLoop.exec();
 
+            QObject::disconnect(aiProgress);
             QObject::disconnect(aiConn);
             QObject::disconnect(aiErr);
         }

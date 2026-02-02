@@ -198,8 +198,10 @@ translateLocally now supports full document translation with AI-powered improvem
 
 **Implementation Details:**
 - 8MB segment size provides safety margin under 10MB Marian limit
-- Segments preserve original identifiers for correct document reconstruction
+- Segments preserve original identifiers and XHTML structure for correct document reconstruction
 - Archive-based formats (DOCX, EPUB) maintain all original metadata and non-translated files
+- **EPUB structure preservation**: Original XHTML DOM tree is preserved - only text nodes are replaced with translations while keeping all HTML tags (`<h1>`, `<h2>`, `<p>`), CSS classes, attributes, stylesheet links, and document structure intact
+- Word-based text replacement algorithm distributes translated content proportionally across original text nodes
 
 ### AI-Powered Translation Improvement
 
@@ -269,7 +271,7 @@ Accessed via File → Open Document, provides:
 - **Worker thread pattern** prevents UI blocking during long translations
 - **QEventLoop synchronization** for waiting on async MarianInterface and LLMInterface operations
 - **Settings persistence** via QSettings for LLM configuration
-- **Real-time progress updates** via Qt signals for translation and LLM processing
+- **Real-time chunk-level progress updates** via Qt signals - LLM progress bar updates as each chunk completes, showing "chunk X/Y" status to prevent apparent freezing during long segment processing
 
 ### Testing with LM Studio
 1. Launch LM Studio and load a model (e.g., Qwen 4k/32k, Llama)
@@ -281,4 +283,4 @@ Accessed via File → Open Document, provides:
 **Known Limitations:**
 - Model discovery may take a few seconds for local providers
 - Very large documents (>50MB) may take significant time with AI improvement
-- Progress bar updates are per-segment, not per-chunk (may appear to pause on large segments)
+- Word-based text replacement may cause minor text overflow between adjacent paragraphs if translation expands significantly, though HTML structure is fully preserved

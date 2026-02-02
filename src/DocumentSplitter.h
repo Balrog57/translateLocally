@@ -15,6 +15,7 @@ public:
         QString identifier;     // For reassembly (chapter name, page number, etc.)
         int index;              // Order index
         qint64 originalSize;    // Size in bytes before translation
+        QString originalXhtml;  // Original XHTML structure (for EPUB/HTML files)
     };
 
     // Split a document into translatable segments
