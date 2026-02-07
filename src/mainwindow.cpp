@@ -27,6 +27,8 @@
 #include <iostream>
 #include <QScrollBar>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QGuiApplication>
 
 namespace {
     void addDisabledItem(QComboBox *combobox, QString label) {
@@ -579,6 +581,12 @@ void MainWindow::on_actionSaveTranslation_triggered() {
                 tr("Could not open file for writing:\n%1").arg(filePath));
         }
     }
+}
+
+void MainWindow::on_copyButton_clicked() {
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    clipboard->setText(ui_->outputBox->toPlainText());
+    ui_->statusbar->showMessage(tr("Translation copied to clipboard"), 3000);
 }
 
 void MainWindow::on_actionExit_triggered() {
