@@ -177,7 +177,7 @@ jobs:
           mv translateLocally.dmg translateLocally.${{ matrix.os }}.${{ matrix.arch }}.dmg
           ls *.dmg
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.dmg
           path: ${{github.workspace}}/build/translateLocally.*.dmg
@@ -297,7 +297,7 @@ jobs:
           ls deb/*.deb
           dpkg -I deb/*.deb
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.deb
           path: ${{github.workspace}}/build/deb/*.deb
@@ -452,7 +452,7 @@ jobs:
           mv translateLocally.exe translateLocally.${{ matrix.os }}.${{ matrix.arch }}.exe
         shell: powershell
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.exe
           path: ${{github.workspace}}/build/Release/*.exe
@@ -465,7 +465,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Update GitHub prerelease
         uses: marvinpinto/action-automatic-releases@latest
