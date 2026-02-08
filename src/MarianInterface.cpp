@@ -20,7 +20,7 @@ std::shared_ptr<marian::Options> makeOptions(const std::string &path_to_model_di
     return options;
 }
 
-int countWords(std::string input) {
+int countWords(const std::string &input) {
     const char * str = input.c_str();
 
     bool inSpaces = true;
@@ -122,17 +122,18 @@ MarianInterface::MarianInterface(QObject *parent)
                     model = std::make_shared<marian::bergamot::TranslationModel>(modelConfig, modelChange->settings.cpu_threads);
                 } else if (input) {
                     if (model) {
-                        std::future<int> wordCount = std::async(countWords, input->text); // @TODO we're doing an "unnecessary" string copy here (necessary because we std::move input into service->translate)
+                        // Count words synchronously to avoid string copy and thread overhead.
+                        int wordCountVal = countWords(input->text);
 
                         Translation translation;
 
                         // Measure the time it takes to queue and respond to the
                         // translation request
                         auto start = std::chrono::steady_clock::now(); // Time the translation
-                        service->translate(model, std::move(input->text), [&] (auto &&val) {
+                        service->translate(model, std::move(input->text), [&, wordCountVal] (auto &&val) {
                             auto end = std::chrono::steady_clock::now();
                             // Calculate translation speed in terms of words per second
-                            double words = wordCount.get();
+                            double words = wordCountVal;
                             std::chrono::duration<double> elapsedSeconds = end - start;
                             int translationSpeed = std::ceil(words / elapsedSeconds.count());
                             
