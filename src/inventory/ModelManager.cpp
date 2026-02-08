@@ -582,7 +582,11 @@ bool ModelManager::extractTarGzInCurrentPath(QFile *file, QStringList &files) {
 
     archive *a_in = archive_read_new();
     archive *a_out = archive_write_disk_new();
-    archive_write_disk_set_options(a_out, ARCHIVE_EXTRACT_TIME);
+    int flags = ARCHIVE_EXTRACT_TIME;
+    flags |= ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+    flags |= ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS;
+    flags |= ARCHIVE_EXTRACT_SECURE_SYMLINKS;
+    archive_write_disk_set_options(a_out, flags);
     
     archive_read_support_format_tar(a_in);
     archive_read_support_filter_gzip(a_in);
