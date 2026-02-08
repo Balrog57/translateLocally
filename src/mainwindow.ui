@@ -114,6 +114,9 @@
          </property>
          <item>
           <widget class="QComboBox" name="localModels">
+           <property name="toolTip">
+            <string>Select a translation model</string>
+           </property>
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -130,6 +133,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="translateButton">
+           <property name="toolTip">
+            <string>Translate (Ctrl+Enter)</string>
+           </property>
            <property name="text">
             <string>Translate</string>
            </property>
