@@ -1,0 +1,4 @@
+## 2024-05-23 - Critical Zip Slip Vulnerability in Model Extraction
+**Vulnerability:** The function `ModelManager::extractTarGzInCurrentPath` uses `libarchive` to extract tarballs without setting secure extraction flags (`ARCHIVE_EXTRACT_SECURE_NODOTDOT`, `ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS`). This allows a malicious model archive (potentially downloaded from a compromised or spoofed repository, or manually imported) to write files outside the intended directory via `../` or absolute paths, leading to arbitrary file overwrite and potential RCE.
+**Learning:** Default behavior of archive extraction libraries is often insecure (preserves paths as-is). Explicit security flags are required to prevent path traversal attacks.
+**Prevention:** Always set `ARCHIVE_EXTRACT_SECURE_NODOTDOT`, `ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS`, and `ARCHIVE_EXTRACT_SECURE_SYMLINKS` when extracting untrusted archives using `libarchive`.
