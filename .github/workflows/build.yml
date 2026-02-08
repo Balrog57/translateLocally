@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -71,7 +71,7 @@ jobs:
 
       - name: Cache Qt
         id: cache-qt
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: "${{ github.workspace }}/qt/"
           key: qt-${{ matrix.os }}-${{ env.qt_version }}
@@ -91,7 +91,7 @@ jobs:
           echo "::set-output name=timestamp::$(date '+%Y-%m-%dT%H.%M.%S')"
 
       - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.ccache_dir }}
           key: ccache-${{ matrix.os }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
@@ -177,7 +177,7 @@ jobs:
           mv translateLocally.dmg translateLocally.${{ matrix.os }}.${{ matrix.arch }}.dmg
           ls *.dmg
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.dmg
           path: ${{github.workspace}}/build/translateLocally.*.dmg
@@ -212,7 +212,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -237,7 +237,7 @@ jobs:
           echo "::set-output name=timestamp::$(date '+%Y-%m-%dT%H.%M.%S')"
 
       - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.ccache_dir }}
           key: ccache-${{ matrix.os }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
@@ -297,7 +297,7 @@ jobs:
           ls deb/*.deb
           dpkg -I deb/*.deb
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.deb
           path: ${{github.workspace}}/build/deb/*.deb
@@ -387,7 +387,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -401,7 +401,7 @@ jobs:
         shell: powershell
 
       - name: Cache vcpkg
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           cache-name: cache-vcpkg
         with:
@@ -452,7 +452,7 @@ jobs:
           mv translateLocally.exe translateLocally.${{ matrix.os }}.${{ matrix.arch }}.exe
         shell: powershell
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.exe
           path: ${{github.workspace}}/build/Release/*.exe
@@ -465,7 +465,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Update GitHub prerelease
         uses: marvinpinto/action-automatic-releases@latest
