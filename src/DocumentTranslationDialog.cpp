@@ -4,6 +4,9 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QEventLoop>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QPushButton>
 
 // Worker Implementation
 DocumentTranslationWorker::DocumentTranslationWorker(
@@ -257,8 +260,27 @@ void DocumentTranslationDialog::onFinished(bool success, QString message) {
     ui_->outputFileEdit->setEnabled(true);
 
     if (success) {
-        QMessageBox::information(this, tr("Translation Complete"), message);
-        accept();
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("Translation Complete"));
+        msgBox.setText(message);
+        msgBox.setIcon(QMessageBox::Information);
+
+        QPushButton *openFileBtn = msgBox.addButton(tr("Open File"), QMessageBox::ActionRole);
+        QPushButton *showInFolderBtn = msgBox.addButton(tr("Show in Folder"), QMessageBox::ActionRole);
+        msgBox.addButton(QMessageBox::Close);
+
+        msgBox.exec();
+
+        if (msgBox.clickedButton() == openFileBtn) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(ui_->outputFileEdit->text()));
+            accept();
+        } else if (msgBox.clickedButton() == showInFolderBtn) {
+            QFileInfo fileInfo(ui_->outputFileEdit->text());
+            QDesktopServices::openUrl(QUrl::fromLocalFile(fileInfo.absolutePath()));
+            accept();
+        } else {
+            accept();
+        }
     } else {
         QMessageBox::warning(this, tr("Translation Failed"), message);
     }
