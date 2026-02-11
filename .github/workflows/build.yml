@@ -28,20 +28,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: "macOS Monterey 12 avx"
-            os: macos-12
-            arch: "core-avx-i"
           - name: "macOS Ventura 13 avx"
             os: macos-13
             arch: "core-avx-i"
           - name: "macOS Ventura 13 x86-64"
             os: macos-13
-            arch: "x86-64"
-          - name: "macOS Monterey 12 avx"
-            os: macos-12
-            arch: "core-avx-i"
-          - name: "macOS Monterey 12 x86-64"
-            os: macos-12
             arch: "x86-64"
           - name: "macOS Sonoma 14 M1"
             os: macos-14
@@ -177,7 +168,7 @@ jobs:
           mv translateLocally.dmg translateLocally.${{ matrix.os }}.${{ matrix.arch }}.dmg
           ls *.dmg
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.dmg
           path: ${{github.workspace}}/build/translateLocally.*.dmg
@@ -297,7 +288,7 @@ jobs:
           ls deb/*.deb
           dpkg -I deb/*.deb
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.deb
           path: ${{github.workspace}}/build/deb/*.deb
@@ -452,7 +443,7 @@ jobs:
           mv translateLocally.exe translateLocally.${{ matrix.os }}.${{ matrix.arch }}.exe
         shell: powershell
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: translateLocally.latest.${{ matrix.os }}.${{ matrix.arch }}.exe
           path: ${{github.workspace}}/build/Release/*.exe
@@ -465,7 +456,9 @@ jobs:
     if: github.ref == 'refs/heads/master'
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
+        with:
+           merge-multiple: true
 
       - name: Update GitHub prerelease
         uses: marvinpinto/action-automatic-releases@latest
