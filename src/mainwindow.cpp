@@ -82,6 +82,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Attach slots
     
+    // Set tooltip for translate button with shortcut
+    ui_->translateButton->setToolTip(tr("Translate (%1)").arg(ui_->translateAction->shortcut().toString(QKeySequence::NativeText)));
+
     // As soon as we've started up, try to register this application as a native messaging host
     connect(this, &MainWindow::launched, this, &MainWindow::registerNativeMessagingAppManifest);
 
@@ -568,8 +571,7 @@ void MainWindow::on_actionSaveTranslation_triggered() {
             QTextStream out(&file);
             out << ui_->outputBox->toPlainText();
             if (file.commit()) {
-                QMessageBox::information(this, tr("Save Translation"),
-                    tr("Translation saved successfully to:\n%1").arg(filePath));
+                ui_->statusbar->showMessage(tr("Translation saved to %1").arg(filePath), 3000);
             } else {
                 QMessageBox::warning(this, tr("Save Error"),
                     tr("Failed to save translation to:\n%1").arg(filePath));
