@@ -582,7 +582,13 @@ bool ModelManager::extractTarGzInCurrentPath(QFile *file, QStringList &files) {
 
     archive *a_in = archive_read_new();
     archive *a_out = archive_write_disk_new();
-    archive_write_disk_set_options(a_out, ARCHIVE_EXTRACT_TIME);
+    // Use secure extraction options to prevent Zip Slip and other path traversal attacks.
+    // ARCHIVE_EXTRACT_TIME: Restore file modification time (existing behavior)
+    // ARCHIVE_EXTRACT_SECURE_NODOTDOT: Refuse to extract paths containing '..'
+    // ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS: Refuse to extract absolute paths
+    // ARCHIVE_EXTRACT_SECURE_SYMLINKS: Refuse to extract symlinks that point outside the destination
+    int flags = ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS | ARCHIVE_EXTRACT_SECURE_SYMLINKS;
+    archive_write_disk_set_options(a_out, flags);
     
     archive_read_support_format_tar(a_in);
     archive_read_support_filter_gzip(a_in);

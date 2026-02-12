@@ -66,6 +66,8 @@ private slots:
 
     void on_actionSaveTranslation_triggered();
 
+    void on_copyButton_clicked();
+
     void on_actionExit_triggered();
 
     void popupError(QString error);

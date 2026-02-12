@@ -78,6 +78,7 @@ CMakeLists.txt.user
 
 # Claude Code local settings
 .claude/
+CLAUDE.md
 
 # Temporary files
 SESSION_LOG.md
