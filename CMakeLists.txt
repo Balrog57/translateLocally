@@ -294,7 +294,10 @@ set(LINK_LIBRARIES
 if(POPPLER_FOUND)
     if(WIN32 AND DEFINED VCPKG_TARGET_TRIPLET)
         # vcpkg manual linking - link both Qt wrapper and core library
-        list(APPEND LINK_LIBRARIES ${POPPLER_LIBRARY} ${POPPLER_CORE_LIBRARY})
+        # Also need to link iconv and openjpeg which are dependencies of poppler in static build
+        set(ICONV_LIBRARY "${VCPKG_INSTALLED}/lib/iconv.lib")
+        set(OPENJPEG_LIBRARY "${VCPKG_INSTALLED}/lib/openjp2.lib")
+        list(APPEND LINK_LIBRARIES ${POPPLER_LIBRARY} ${POPPLER_CORE_LIBRARY} ${ICONV_LIBRARY} ${OPENJPEG_LIBRARY})
     else()
         # Standard CMake target
         list(APPEND LINK_LIBRARIES Poppler::Qt${QT_VERSION_MAJOR})
