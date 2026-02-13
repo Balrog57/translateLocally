@@ -74,7 +74,25 @@ make -j5
 Check the script for the environment variables that you need to set if you want to take advantage of signing and notarization.
 
 ## Windows Build
-On Windows, we recommend using [vcpkg](https://github.com/Microsoft/vcpkg) to install all necessary packages and Visual Studio to perform the build.
+On Windows, we recommend using [vcpkg](https://github.com/Microsoft/vcpkg) to install all necessary packages.
+
+### Static Build with vcpkg
+To build a static executable (recommended for portability), follow these steps:
+
+1. **Install dependencies**:
+   ```powershell
+   $env:VCPKG_BUILD_TYPE = 'release'
+   vcpkg install protobuf:x64-windows-static pcre2:x64-windows-static zlib:x64-windows-static libarchive:x64-windows-static qt5-base:x64-windows-static qt5-tools:x64-windows-static qt5-svg:x64-windows-static poppler:x64-windows-static openjpeg:x64-windows-static libiconv:x64-windows-static
+   ```
+
+2. **Configure and Build**:
+   ```powershell
+   mkdir build
+   cd build
+   cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+   cmake --build . --config Release -j4
+   ```
+   The executable will be located in `build/Release/translateLocally.exe`.
 
 # Command line interface
 translateLocally supports using the command line to perform translations. Example usage:
